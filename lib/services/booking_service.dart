@@ -2,9 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../features/shared/models/booking.dart';
 
 class BookingService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final CollectionReference _bookingsCollection =
-      FirebaseFirestore.instance.collection('bookings');
+  final CollectionReference _bookingsCollection = FirebaseFirestore.instance.collection('bookings');
 
   Future<String> createBooking(Booking booking) async {
     final docRef = _bookingsCollection.doc();
@@ -29,17 +27,21 @@ class BookingService {
   Future<List<Booking>> getClientBookings(String clientId) async {
     final snapshot = await _bookingsCollection
         .where('clientId', isEqualTo: clientId)
-        .orderBy('createdAt', descending: true)
+        .limit(100)
         .get();
-    return snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList();
+    final bookings = snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList();
+    bookings.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return bookings;
   }
 
   Future<List<Booking>> getNurseBookings(String nurseId) async {
     final snapshot = await _bookingsCollection
         .where('nurseId', isEqualTo: nurseId)
-        .orderBy('createdAt', descending: true)
+        .limit(100)
         .get();
-    return snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList();
+    final bookings = snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList();
+    bookings.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return bookings;
   }
 
   Future<void> checkInShift(String bookingId) async {
@@ -47,7 +49,6 @@ class BookingService {
       'status': 'in_progress',
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    // Also update attendance sub-collection if needed
   }
 
   Future<void> checkOutShift(String bookingId) async {
@@ -55,26 +56,5 @@ class BookingService {
       'status': 'completed',
       'updatedAt': FieldValue.serverTimestamp(),
     });
-  }
-}
-
-extension BookingCopyWith on Booking {
-  Booking copyWith({String? id}) {
-    return Booking(
-      id: id ?? this.id,
-      clientId: clientId,
-      nurseId: nurseId,
-      careRequestId: careRequestId,
-      shiftStart: shiftStart,
-      shiftEnd: shiftEnd,
-      shiftHours: shiftHours,
-      pricePerHour: pricePerHour,
-      platformFee: platformFee,
-      totalAmount: totalAmount,
-      status: status,
-      paymentStatus: paymentStatus,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-    );
   }
 }
