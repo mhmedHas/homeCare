@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'core/constants/app_theme.dart';
 import 'core/routing/app_router.dart';
 import 'services/firebase_service.dart';
 import 'services/shared_preferences_service.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Init Firebase
-  await FirebaseService().init();
+  await initializeDateFormatting('ar');
+  await initializeDateFormatting('ar_EG');
 
-  // Init SharedPreferences
+  await FirebaseService().init();
   await SharedPreferencesService().init();
 
   runApp(const ProviderScope(child: MyApp()));
