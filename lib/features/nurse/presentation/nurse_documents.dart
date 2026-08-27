@@ -14,23 +14,21 @@ class NurseDocumentsScreen extends StatefulWidget {
 }
 
 class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
+  static const _requiredDocuments = {'id_card', 'qualification'};
+
+  final _picker = ImagePicker();
+  final List<DocumentType> _documentTypes = const [
+    DocumentType(id: 'id_card', label: 'بطاقة الهوية', required: true, icon: Icons.credit_card_outlined),
+    DocumentType(id: 'qualification', label: 'المؤهل الدراسي', required: true, icon: Icons.school_outlined),
+    DocumentType(id: 'license', label: 'ترخيص مزاولة المهنة', required: false, icon: Icons.verified_outlined),
+  ];
+
   bool _isLoading = true;
   bool _isUploading = false;
   String? _errorMessage;
   Map<String, String> _documents = {};
   String _verificationStatus = 'not_submitted';
   String? _rejectionReason;
-
-  final List<DocumentType> _documentTypes = [
-    DocumentType(id: 'id_card', label: 'بطاقة الهوية', icon: Icons.credit_card),
-    DocumentType(
-        id: 'qualification', label: 'المؤهل الدراسي', icon: Icons.school),
-    DocumentType(id: 'license', label: 'ترخيص المزاولة', icon: Icons.verified),
-    DocumentType(
-        id: 'additional',
-        label: 'شهادات إضافية (اختياري)',
-        icon: Icons.add_circle),
-  ];
 
   @override
   void initState() {
@@ -39,290 +37,192 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
   }
 
   Future<void> _loadDocuments() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (mounted) setState(() { _isLoading = true; _errorMessage = null; });
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        setState(() {
-          _errorMessage = 'يرجى تسجيل الدخول';
-        });
-        return;
-      }
-
-      final doc = await FirebaseFirestore.instance
-          .collection('nurseDocuments')
-          .doc(user.uid)
-          .get();
-
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) throw StateError('unauthenticated');
+      final doc = await FirebaseFirestore.instance.collection('nurseDocuments').doc(uid).get();
+      if (!mounted) return;
       if (doc.exists) {
-        final data = doc.data()!;
-        setState(() {
-          _documents = Map<String, String>.from(data['documents'] ?? {});
-          _verificationStatus = data['verificationStatus'] ?? 'not_submitted';
-          _rejectionReason = data['rejectionReason'];
-        });
+        final data = doc.data() ?? {};
+        final rawDocuments = data['documents'];
+        _documents = rawDocuments is Map
+            ? rawDocuments.map((key, value) => MapEntry(key.toString(), value.toString()))
+            : {};
+        _verificationStatus = data['verificationStatus']?.toString() ?? 'not_submitted';
+        _rejectionReason = data['rejectionReason']?.toString();
       }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'حدث خطأ';
-      });
+    } catch (_) {
+      if (mounted) setState(() => _errorMessage = 'تعذر تحميل المستندات');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _uploadDocument(String docType, String label) async {
+  Future<void> _uploadDocument(DocumentType type) async {
+    if (_isUploading) return;
     try {
-      final picker = ImagePicker();
-      final image = await picker.pickImage(source: ImageSource.gallery);
+      final image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 82, maxWidth: 1800);
       if (image == null) return;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) throw StateError('unauthenticated');
 
-      setState(() {
-        _isUploading = true;
-        _errorMessage = null;
-      });
-
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('غير مسجل دخول');
-
-      final file = File(image.path);
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('nurse_documents')
-          .child(user.uid)
-          .child('$docType.jpg');
-
-      await ref.putFile(file);
+      setState(() { _isUploading = true; _errorMessage = null; });
+      final ref = FirebaseStorage.instance.ref().child('nurse_documents').child(uid).child('${type.id}.jpg');
+      await ref.putFile(File(image.path), SettableMetadata(contentType: 'image/jpeg'));
       final url = await ref.getDownloadURL();
 
-      // Save to Firestore
-      _documents[docType] = url;
-      await FirebaseFirestore.instance
-          .collection('nurseDocuments')
-          .doc(user.uid)
-          .set({
-        'uid': user.uid,
+      final updatedDocuments = Map<String, String>.from(_documents)..[type.id] = url;
+      await FirebaseFirestore.instance.collection('nurseDocuments').doc(uid).set({
+        'uid': uid,
+        'documents': updatedDocuments,
+        'verificationStatus': _verificationStatus == 'approved' ? 'approved' : 'not_submitted',
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (!mounted) return;
+      setState(() {
+        _documents = updatedDocuments;
+        if (_verificationStatus != 'approved') _verificationStatus = 'not_submitted';
+        _rejectionReason = null;
+      });
+      _showMessage('تم رفع ${type.label} بنجاح');
+    } catch (_) {
+      if (mounted) setState(() => _errorMessage = 'تعذر رفع المستند. تأكد من اختيار صورة واضحة وحاول مرة أخرى.');
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  Future<void> _submitForReview() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final missing = _requiredDocuments.where((id) => !_documents.containsKey(id)).toList();
+    if (missing.isNotEmpty) {
+      _showMessage('ارفع البطاقة والمؤهل الدراسي أولاً');
+      return;
+    }
+
+    setState(() => _isUploading = true);
+    try {
+      await FirebaseFirestore.instance.collection('nurseDocuments').doc(uid).set({
+        'uid': uid,
         'documents': _documents,
         'verificationStatus': 'pending',
         'submittedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
-
+      }, SetOptions(merge: true));
+      if (!mounted) return;
       setState(() {
         _verificationStatus = 'pending';
         _rejectionReason = null;
       });
-
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('تم رفع $label بنجاح')));
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'خطأ في رفع الملف: $e';
-      });
+      _showMessage('تم إرسال المستندات للمراجعة');
+    } catch (_) {
+      if (mounted) setState(() => _errorMessage = 'تعذر إرسال المستندات للمراجعة');
     } finally {
-      setState(() {
-        _isUploading = false;
-      });
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
-  String _getStatusLabel(String status) {
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _statusLabel(String status) {
     switch (status) {
-      case 'not_submitted':
-        return 'لم يتم التقديم';
-      case 'pending':
-        return 'قيد المراجعة';
-      case 'approved':
-        return 'تم التحقق ✅';
-      case 'rejected':
-        return 'مرفوض ❌';
-      default:
-        return status;
+      case 'pending': return 'قيد المراجعة';
+      case 'approved': return 'تم التحقق';
+      case 'rejected': return 'مرفوض ويحتاج تعديل';
+      default: return 'لم يتم الإرسال للمراجعة';
     }
   }
 
-  Color _getStatusColor(String status) {
+  Color _statusColor(String status) {
     switch (status) {
-      case 'not_submitted':
-        return Colors.grey;
-      case 'pending':
-        return Colors.orange;
-      case 'approved':
-        return Colors.green;
-      case 'rejected':
-        return Colors.red;
-      default:
-        return Colors.grey;
+      case 'pending': return Colors.orange;
+      case 'approved': return Colors.green;
+      case 'rejected': return Colors.red;
+      default: return Colors.grey;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('المستندات')),
+      appBar: AppBar(title: const Text('توثيق الحساب')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-              ? Center(
-                  child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                      Text(_errorMessage!,
-                          style: const TextStyle(color: AppColors.error)),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                          onPressed: _loadDocuments,
-                          child: const Text('إعادة المحاولة')),
-                    ]))
-              : Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Status
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _getStatusColor(_verificationStatus)
-                              .withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                                _verificationStatus == 'approved'
-                                    ? Icons.check_circle
-                                    : Icons.info_outline,
-                                color: _getStatusColor(_verificationStatus)),
-                            const SizedBox(width: 8),
-                            Text(
-                              'حالة المستندات: ${_getStatusLabel(_verificationStatus)}',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: _getStatusColor(_verificationStatus)),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (_rejectionReason != null) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.red.shade200),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('سبب الرفض:',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.bold)),
-                              Text(_rejectionReason!),
-                            ],
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 24),
-
-                      const Text('المستندات المطلوبة:',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold)),
+          : _errorMessage != null && _documents.isEmpty
+              ? _errorState()
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                  children: [
+                    _statusCard(),
+                    const SizedBox(height: 16),
+                    const Text('المستندات المطلوبة', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    const Text('البطاقة والمؤهل الدراسي مطلوبان. ترخيص مزاولة المهنة اختياري إذا كان متاحًا.', style: TextStyle(color: AppColors.textSecondary)),
+                    const SizedBox(height: 14),
+                    ..._documentTypes.map(_documentCard),
+                    if (_errorMessage != null) ...[
                       const SizedBox(height: 8),
-                      const Text('يرجى رفع صورة واضحة لكل مستند',
-                          style: TextStyle(color: AppColors.textSecondary)),
-                      const SizedBox(height: 16),
-
-                      Expanded(
-                        child: ListView.builder(
-                          itemCount: _documentTypes.length,
-                          itemBuilder: (context, index) {
-                            final doc = _documentTypes[index];
-                            final isUploaded = _documents.containsKey(doc.id);
-                            return Card(
-                              margin: const EdgeInsets.symmetric(vertical: 6),
-                              child: ListTile(
-                                leading: Icon(doc.icon,
-                                    color: isUploaded
-                                        ? AppColors.success
-                                        : AppColors.primary),
-                                title: Text(doc.label),
-                                subtitle: isUploaded
-                                    ? const Text('تم الرفع ✅',
-                                        style:
-                                            TextStyle(color: AppColors.success))
-                                    : null,
-                                trailing: isUploaded
-                                    ? IconButton(
-                                        icon: const Icon(Icons.visibility,
-                                            color: AppColors.primary),
-                                        onPressed: () {
-                                          // Show image preview
-                                          showDialog(
-                                            context: context,
-                                            builder: (context) => Dialog(
-                                              child: Image.network(
-                                                  _documents[doc.id]!),
-                                            ),
-                                          );
-                                        },
-                                      )
-                                    : ElevatedButton(
-                                        onPressed: _isUploading
-                                            ? null
-                                            : () => _uploadDocument(
-                                                doc.id, doc.label),
-                                        child: const Text('رفع'),
-                                      ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-
-                      if (_verificationStatus == 'not_submitted' ||
-                          _verificationStatus == 'rejected')
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _isUploading
-                                ? null
-                                : () async {
-                                    // Submit for verification
-                                    final user =
-                                        FirebaseAuth.instance.currentUser;
-                                    if (user != null) {
-                                      await FirebaseFirestore.instance
-                                          .collection('nurseDocuments')
-                                          .doc(user.uid)
-                                          .update({
-                                        'verificationStatus': 'pending',
-                                        'submittedAt':
-                                            FieldValue.serverTimestamp(),
-                                      });
-                                      setState(() {
-                                        _verificationStatus = 'pending';
-                                      });
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(const SnackBar(
-                                              content: Text(
-                                                  'تم إرسال المستندات للمراجعة')));
-                                    }
-                                  },
-                            child: const Text('إرسال للمراجعة'),
-                          ),
-                        ),
-                      const SizedBox(height: 16),
+                      Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.error)),
                     ],
-                  ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      height: 52,
+                      child: FilledButton.icon(
+                        onPressed: _isUploading || _verificationStatus == 'pending' || _verificationStatus == 'approved' ? null : _submitForReview,
+                        icon: _isUploading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send_outlined),
+                        label: Text(_verificationStatus == 'pending' ? 'قيد المراجعة' : _verificationStatus == 'approved' ? 'تم التحقق' : 'إرسال للمراجعة'),
+                      ),
+                    ),
+                  ],
                 ),
+    );
+  }
+
+  Widget _errorState() => Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.cloud_off_outlined, size: 56), const SizedBox(height: 12), Text(_errorMessage ?? 'حدث خطأ'), const SizedBox(height: 16), FilledButton.icon(onPressed: _loadDocuments, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة'))])));
+
+  Widget _statusCard() {
+    final color = _statusColor(_verificationStatus);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(_verificationStatus == 'approved' ? Icons.check_circle : Icons.info_outline, color: color),
+            const SizedBox(width: 10),
+            Expanded(child: Text('حالة التوثيق: ${_statusLabel(_verificationStatus)}', style: TextStyle(fontWeight: FontWeight.bold, color: color))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _documentCard(DocumentType type) {
+    final uploaded = _documents.containsKey(type.id);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: Icon(type.icon, color: uploaded ? AppColors.success : AppColors.primary),
+        title: Text(type.label),
+        subtitle: Text(type.required ? 'مطلوب' : 'اختياري'),
+        trailing: uploaded
+            ? IconButton(icon: const Icon(Icons.visibility_outlined), onPressed: () => _preview(_documents[type.id]!))
+            : FilledButton.tonal(onPressed: _isUploading ? null : () => _uploadDocument(type), child: const Text('رفع')),
+      ),
+    );
+  }
+
+  void _preview(String url) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => Dialog(
+        child: InteractiveViewer(child: Image.network(url, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Padding(padding: EdgeInsets.all(32), child: Text('تعذر عرض الصورة')))),
+      ),
     );
   }
 }
@@ -330,6 +230,8 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
 class DocumentType {
   final String id;
   final String label;
+  final bool required;
   final IconData icon;
-  DocumentType({required this.id, required this.label, required this.icon});
+
+  const DocumentType({required this.id, required this.label, required this.required, required this.icon});
 }
