@@ -41,16 +41,26 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
           .limit(50)
           .get();
 
+      String? bookingId;
       if (req.status == 'booked' || req.status == 'in_progress' || req.status == 'completed') {
         final bookings = await db.collection('bookings')
             .where('careRequestId', isEqualTo: widget.requestId)
-            .where('clientId', isEqualTo: uid)
-            .limit(1)
+            .limit(5)
             .get();
-        if (bookings.docs.isNotEmpty) _bookingId = bookings.docs.first.id;
+        for (final doc in bookings.docs) {
+          if (doc.data()['clientId'] == uid) {
+            bookingId = doc.id;
+            break;
+          }
+        }
       }
 
-      if (mounted) setState(() { _request = req; _offerCount = offers.docs.length; _isLoading = false; });
+      if (mounted) setState(() {
+        _request = req;
+        _offerCount = offers.docs.length;
+        _bookingId = bookingId;
+        _isLoading = false;
+      });
     } catch (_) {
       if (mounted) setState(() { _errorMessage = 'تعذر تحميل الطلب'; _isLoading = false; });
     }
