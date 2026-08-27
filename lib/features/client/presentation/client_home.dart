@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../services/auth_service.dart';
+import '../../../services/care_request_service.dart';
 import '../../../services/user_service.dart';
 import '../../shared/models/app_user.dart';
+import '../../shared/models/care_request.dart';
 
 class ClientHomeScreen extends StatefulWidget {
   const ClientHomeScreen({super.key});
@@ -14,50 +17,43 @@ class ClientHomeScreen extends StatefulWidget {
 
 class _ClientHomeScreenState extends State<ClientHomeScreen> {
   AppUser? _user;
+  List<CareRequest> _requests = [];
   bool _isLoading = true;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _loadUser();
+    _loadHome();
   }
 
-  Future<void> _loadUser() async {
+  Future<void> _loadHome() async {
     if (mounted) {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
       });
     }
-
     try {
       final firebaseUser = AuthService().currentUser;
-      if (firebaseUser == null) {
-        if (mounted) {
-          setState(() => _errorMessage = 'يرجى تسجيل الدخول');
-        }
-        return;
-      }
-
-      final appUser = await UserService().getUser(firebaseUser.uid);
-      if (appUser == null) {
-        if (mounted) {
-          setState(() => _errorMessage = 'بيانات المستخدم غير مكتملة');
-        }
-        return;
-      }
-
+      if (firebaseUser == null) throw Exception('auth');
+      final results = await Future.wait([
+        UserService().getUser(firebaseUser.uid),
+        CareRequestService().getClientRequests(firebaseUser.uid),
+      ]);
       if (mounted) {
-        setState(() => _user = appUser);
+        setState(() {
+          _user = results[0] as AppUser?;
+          _requests = (results[1] as List<CareRequest>);
+          _isLoading = false;
+        });
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _errorMessage = 'حدث خطأ في تحميل البيانات');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _errorMessage = 'حدث خطأ في تحميل البيانات';
+          _isLoading = false;
+        });
       }
     }
   }
@@ -65,8 +61,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
+    final name = _user?.name.trim().isNotEmpty == true ? _user!.name.trim() : 'العميل';
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -83,262 +78,173 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
           ),
         ],
       ),
-      body: _buildBody(context, theme, colorScheme),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+              ? _errorView(theme)
+              : RefreshIndicator(
+                  onRefresh: _loadHome,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    children: [
+                      _WelcomeCard(name: name),
+                      const SizedBox(height: 16),
+                      _RequestCareCard(onPressed: () => context.push('/client/create-request')),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(child: _QuickAction(icon: Icons.post_add_outlined, title: 'طلباتي', onTap: () => context.go('/client/my-requests'))),
+                          const SizedBox(width: 12),
+                          Expanded(child: _QuickAction(icon: Icons.calendar_month_outlined, title: 'حجوزاتي', onTap: () => context.go('/client/my-bookings'))),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _QuickAction(icon: Icons.chat_bubble_outline, title: 'الرسائل', onTap: () => context.go('/client/messages')),
+                      const SizedBox(height: 24),
+                      Text('آخر طلبات الرعاية', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 12),
+                      if (_requests.isEmpty)
+                        _emptyRequests()
+                      else
+                        ..._requests.take(3).map(_requestCard),
+                    ],
+                  ),
+                ),
     );
   }
 
-  Widget _buildBody(
-    BuildContext context,
-    ThemeData theme,
-    ColorScheme colorScheme,
-  ) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_errorMessage != null) {
-      return Center(
+  Widget _errorView(ThemeData theme) => Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.cloud_off_outlined,
-                  size: 48, color: colorScheme.error),
-              const SizedBox(height: 12),
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyLarge,
-              ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: _loadUser,
-                icon: const Icon(Icons.refresh),
-                label: const Text('إعادة المحاولة'),
-              ),
-            ],
-          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.cloud_off_outlined, size: 48, color: theme.colorScheme.error),
+            const SizedBox(height: 12),
+            Text(_errorMessage!, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton.icon(onPressed: _loadHome, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة')),
+          ]),
         ),
       );
-    }
 
-    final name = _user?.name.trim().isNotEmpty == true
-        ? _user!.name.trim()
-        : 'العميل';
+  Widget _emptyRequests() => Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(children: [
+            const Icon(Icons.post_add_outlined, size: 42),
+            const SizedBox(height: 8),
+            const Text('لسه مفيش طلبات رعاية'),
+            const SizedBox(height: 10),
+            OutlinedButton(onPressed: () => context.push('/client/create-request'), child: const Text('إنشاء طلب')),
+          ]),
+        ),
+      );
 
-    return RefreshIndicator(
-      onRefresh: _loadUser,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        children: [
-          _WelcomeCard(name: name),
-          const SizedBox(height: 16),
-          _RequestCareCard(
-            onPressed: () => context.push('/client/create-request'),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'الوصول السريع',
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _QuickAction(
-                  icon: Icons.calendar_month_outlined,
-                  title: 'حجوزاتي',
-                  onTap: () => context.go('/client/my-bookings'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _QuickAction(
-                  icon: Icons.chat_bubble_outline,
-                  title: 'الرسائل',
-                  onTap: () => context.go('/client/messages'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'الحجوزات القادمة',
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            margin: EdgeInsets.zero,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: () => context.go('/client/my-bookings'),
-              child: const Padding(
-                padding: EdgeInsets.all(18),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      child: Icon(Icons.event_available_outlined),
-                    ),
-                    SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'لا توجد حجوزات حالية',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          SizedBox(height: 4),
-                          Text('عند وجود حجز سيظهر هنا تلقائيًا.'),
-                        ],
-                      ),
-                    ),
-                    Icon(Icons.chevron_left),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'كيف نساعدك؟',
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'اطلب مقدم رعاية مناسب حسب احتياجات الحالة والوقت والمنطقة.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
+  Widget _requestCard(CareRequest request) {
+    final status = _status(request.status);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => context.push('/client/request-details/${request.id}'),
+        child: Padding(
+          padding: const EdgeInsets.all(15),
+          child: Row(children: [
+            CircleAvatar(backgroundColor: AppColors.primaryLight, child: Icon(Icons.medical_services_outlined, color: AppColors.primary)),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(request.careType, style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text('${request.shiftHours} ساعة × ${request.daysCount} يوم • ${request.governorate}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              const SizedBox(height: 3),
+              Text(DateFormat('d/M/yyyy', 'ar').format(request.startDate), style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+            ])),
+            _Badge(text: status.$1, color: status.$2),
+          ]),
+        ),
       ),
     );
+  }
+
+  (String, Color) _status(String value) {
+    switch (value) {
+      case 'open': return ('مفتوح', AppColors.primary);
+      case 'booked': return ('تم اختيار ممرض', Colors.blue);
+      case 'in_progress': return ('جاري', Colors.orange);
+      case 'completed': return ('مكتمل', Colors.green);
+      case 'cancelled': return ('ملغي', AppColors.error);
+      default: return ('قيد المراجعة', Colors.grey);
+    }
   }
 }
 
 class _WelcomeCard extends StatelessWidget {
   final String name;
-
   const _WelcomeCard({required this.name});
-
   @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            const CircleAvatar(
-              radius: 28,
-              child: Icon(Icons.person_outline, size: 30),
-            ),
+  Widget build(BuildContext context) => Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(children: [
+            const CircleAvatar(radius: 28, child: Icon(Icons.person_outline, size: 30)),
             const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'أهلاً يا $name 👋',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text('إحنا هنا عشان نسهّل عليك رعاية الحالة في البيت.'),
-                ],
-              ),
-            ),
-          ],
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('أهلاً يا $name 👋', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              const Text('إحنا هنا عشان نسهّل عليك رعاية الحالة في البيت.'),
+            ])),
+          ]),
         ),
-      ),
-    );
-  }
+      );
 }
 
 class _RequestCareCard extends StatelessWidget {
   final VoidCallback onPressed;
-
   const _RequestCareCard({required this.onPressed});
-
   @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+  Widget build(BuildContext context) => Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Icon(Icons.medical_services_outlined, size: 34),
             const SizedBox(height: 12),
-            Text(
-              'محتاج ممرض؟',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
+            Text('محتاج ممرض؟', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
-            const Text(
-              'أنشئ طلب رعاية وحدد احتياجات الحالة، وبعدها اختار مقدم الرعاية المناسب.',
-            ),
+            const Text('أنشئ طلب رعاية وحدد احتياجات الحالة، وبعدها اختار مقدم الرعاية المناسب.'),
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: onPressed,
-                icon: const Icon(Icons.add_circle_outline),
-                label: const Text('اطلب رعاية'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-              ),
-            ),
-          ],
+            SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: onPressed, icon: const Icon(Icons.add_circle_outline), label: const Text('اطلب رعاية'))),
+          ]),
         ),
-      ),
-    );
-  }
+      );
 }
 
 class _QuickAction extends StatelessWidget {
   final IconData icon;
   final String title;
   final VoidCallback onTap;
-
-  const _QuickAction({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-  });
-
+  const _QuickAction({required this.icon, required this.title, required this.onTap});
   @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          child: Column(
-            children: [
-              Icon(icon, size: 28),
-              const SizedBox(height: 8),
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-            ],
-          ),
+  Widget build(BuildContext context) => Card(
+        margin: EdgeInsets.zero,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, size: 25), const SizedBox(width: 8), Text(title, style: const TextStyle(fontWeight: FontWeight.w700))])),
         ),
-      ),
-    );
-  }
+      );
+}
+
+class _Badge extends StatelessWidget {
+  final String text;
+  final Color color;
+  const _Badge({required this.text, required this.color});
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(color: color.withValues(alpha: .12), borderRadius: BorderRadius.circular(20)),
+        child: Text(text, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+      );
 }
