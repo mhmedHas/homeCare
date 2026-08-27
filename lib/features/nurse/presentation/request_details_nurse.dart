@@ -1,233 +1,130 @@
-import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
 import '../../../core/constants/app_colors.dart';
-import '../../../services/care_request_service.dart';
-import '../../../services/booking_service.dart';
-import '../../../services/auth_service.dart';
 import '../../shared/models/care_request.dart';
-import '../../shared/models/booking.dart';
 
 class RequestDetailsNurseScreen extends StatefulWidget {
   final String requestId;
   const RequestDetailsNurseScreen({super.key, required this.requestId});
-
   @override
-  State<RequestDetailsNurseScreen> createState() =>
-      _RequestDetailsNurseScreenState();
+  State<RequestDetailsNurseScreen> createState() => _RequestDetailsNurseScreenState();
 }
 
 class _RequestDetailsNurseScreenState extends State<RequestDetailsNurseScreen> {
   CareRequest? _request;
-  bool _isLoading = true;
-  String? _errorMessage;
-  bool _isAccepting = false;
+  bool _loading = true;
+  bool _sending = false;
+  bool _alreadyApplied = false;
+  final _price = TextEditingController();
+  final _note = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
-    _loadRequest();
-  }
+  void initState() { super.initState(); _load(); }
 
-  Future<void> _loadRequest() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  Future<void> _load() async {
     try {
-      final req = await CareRequestService().getRequest(widget.requestId);
-      if (req == null) {
-        setState(() {
-          _errorMessage = 'الطلب غير موجود';
-        });
-        return;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final snap = await FirebaseFirestore.instance.collection('careRequests').doc(widget.requestId).get();
+      if (!snap.exists) throw Exception('missing');
+      final request = CareRequest.fromFirestore(snap);
+      if (uid != null) {
+        final offer = await FirebaseFirestore.instance.collection('careOffers').where('requestId', isEqualTo: widget.requestId).where('nurseId', isEqualTo: uid).limit(1).get();
+        _alreadyApplied = offer.docs.isNotEmpty;
       }
-      if (req.status != 'open') {
-        setState(() {
-          _errorMessage = 'هذا الطلب غير متاح حالياً';
-        });
-        return;
-      }
-      setState(() {
-        _request = req;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'حدث خطأ في تحميل الطلب';
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() { _request = request; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _acceptRequest() async {
-    setState(() {
-      _isAccepting = true;
-      _errorMessage = null;
-    });
+  Future<void> _submitOffer() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final request = _request;
+    final price = double.tryParse(_price.text.trim());
+    if (uid == null || request == null || price == null || price <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اكتب سعر الشيفت بشكل صحيح')));
+      return;
+    }
+    if (request.status != 'open') {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الطلب لم يعد متاحاً للتقديم')));
+      return;
+    }
+    setState(() => _sending = true);
     try {
-      final user = AuthService().currentUser;
-      if (user == null) {
-        setState(() {
-          _errorMessage = 'يرجى تسجيل الدخول';
-        });
-        return;
-      }
-
-      // Check if still open using transaction
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final docRef = FirebaseFirestore.instance
-            .collection('careRequests')
-            .doc(widget.requestId);
-        final doc = await transaction.get(docRef);
-        if (!doc.exists || doc.data()!['status'] != 'open') {
-          throw Exception('الطلب غير متاح حالياً');
-        }
-
-        // Update request status
-        transaction.update(docRef, {
-          'status': 'matching',
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+      final userSnap = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final profileSnap = await FirebaseFirestore.instance.collection('nurseProfiles').doc(uid).get();
+      final userData = userSnap.data() ?? {};
+      final profile = profileSnap.data() ?? {};
+      final ref = FirebaseFirestore.instance.collection('careOffers').doc();
+      await ref.set({
+        'requestId': request.id,
+        'clientId': request.clientId,
+        'nurseId': uid,
+        'nurseName': userData['name'] ?? 'ممرض',
+        'nursePhotoUrl': userData['photoUrl'],
+        'nurseRating': (profile['averageRating'] ?? 0).toDouble(),
+        'nurseExperienceYears': profile['experienceYears'] ?? 0,
+        'nurseVerified': userData['isVerified'] == true,
+        'governorate': request.governorate,
+        'proposedPrice': price,
+        'note': _note.text.trim(),
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
-
-      // Create booking
-      final pricePerHour =
-          100.0; // Placeholder - should come from nurse profile
-      final total = pricePerHour * _request!.shiftHours * _request!.daysCount;
-      final fee = total * 0.10;
-
-      final booking = Booking(
-        id: '',
-        clientId: _request!.clientId,
-        nurseId: user.uid,
-        careRequestId: _request!.id,
-        shiftStart: _request!.startDate,
-        shiftEnd:
-            _request!.startDate.add(Duration(hours: _request!.shiftHours)),
-        shiftHours: _request!.shiftHours,
-        pricePerHour: pricePerHour,
-        platformFee: fee,
-        totalAmount: total + fee,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-
-      await BookingService().createBooking(booking);
-
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('تم قبول الطلب بنجاح')));
-        context.go('/nurse/home');
+        setState(() { _alreadyApplied = true; _sending = false; });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال عرضك للعميل')));
       }
-    } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-      });
-    } finally {
-      setState(() {
-        _isAccepting = false;
-      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => _sending = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر إرسال العرض، حاول مرة أخرى')));
+      }
     }
   }
+
+  @override
+  void dispose() { _price.dispose(); _note.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final r = _request;
+    if (r == null) return const Scaffold(body: Center(child: Text('الطلب غير موجود')));
     return Scaffold(
       appBar: AppBar(title: const Text('تفاصيل الطلب')),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-              ? Center(
-                  child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                      Text(_errorMessage!,
-                          style: const TextStyle(color: AppColors.error)),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                          onPressed: _loadRequest,
-                          child: const Text('إعادة المحاولة')),
-                    ]))
-              : _request == null
-                  ? const Center(child: Text('الطلب غير موجود'))
-                  : Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildInfoRow('الحالة', _request!.patientName),
-                          _buildInfoRow('العمر', '${_request!.patientAge} سنة'),
-                          _buildInfoRow(
-                              'الجنس',
-                              _request!.patientGender == 'male'
-                                  ? 'ذكر'
-                                  : 'أنثى'),
-                          _buildInfoRow('نوع الرعاية', _request!.careType),
-                          _buildInfoRow(
-                              'عدد الساعات', '${_request!.shiftHours} ساعة'),
-                          _buildInfoRow(
-                              'عدد الأيام', '${_request!.daysCount} يوم'),
-                          _buildInfoRow('التاريخ',
-                              DateFormat.yMMMd().format(_request!.startDate)),
-                          _buildInfoRow('الوقت',
-                              '${_request!.startTime.hour}:${_request!.startTime.minute}'),
-                          _buildInfoRow('المحافظة', _request!.governorate),
-                          _buildInfoRow('المنطقة', _request!.area),
-                          const SizedBox(height: 8),
-                          const Text('الخدمات:',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                          Wrap(
-                            children: _request!.services
-                                .map((s) => Chip(label: Text(s)))
-                                .toList(),
-                          ),
-                          if (_request!.notes != null) ...[
-                            const SizedBox(height: 8),
-                            const Text('ملاحظات:',
-                                style: TextStyle(fontWeight: FontWeight.bold)),
-                            Text(_request!.notes!),
-                          ],
-                          const Spacer(),
-                          if (_errorMessage != null)
-                            Text(_errorMessage!,
-                                style: const TextStyle(color: AppColors.error)),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: _isAccepting ? null : _acceptRequest,
-                              child: _isAccepting
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                          color: Colors.white, strokeWidth: 2))
-                                  : const Text('قبول الطلب'),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                      ),
-                    ),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('طلب رعاية', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 12),
+          _row('نوع الرعاية', r.careType), _row('العمر', '${r.patientAge} سنة'),
+          _row('الجنس', r.patientGender == 'male' ? 'ذكر' : 'أنثى'),
+          _row('الشيفت', '${r.shiftHours} ساعة × ${r.daysCount} يوم'),
+          _row('التاريخ', DateFormat('d/M/yyyy').format(r.startDate)),
+          _row('المحافظة', r.governorate), _row('المنطقة', r.area),
+          const SizedBox(height: 8), Text(r.services.join(' • '), style: const TextStyle(color: AppColors.textSecondary)),
+          if (r.notes?.isNotEmpty == true) ...[const SizedBox(height: 10), Text(r.notes!)],
+        ]))),
+        const SizedBox(height: 16),
+        if (_alreadyApplied)
+          Card(color: AppColors.primaryLight, child: const Padding(padding: EdgeInsets.all(18), child: Row(children: [Icon(Icons.check_circle, color: AppColors.primary), SizedBox(width: 10), Expanded(child: Text('قدمت عرضك بالفعل. انتظر اختيار العميل.'))])))
+        else if (r.status == 'open') ...[
+          Text('قدم عرضك', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 10),
+          TextField(controller: _price, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'سعر الشيفت المقترح', suffixText: 'ج.م', prefixIcon: Icon(Icons.payments_outlined))),
+          const SizedBox(height: 12),
+          TextField(controller: _note, maxLines: 3, decoration: const InputDecoration(labelText: 'رسالة للعميل (اختياري)', alignLabelWithHint: true, prefixIcon: Icon(Icons.message_outlined))),
+          const SizedBox(height: 16),
+          SizedBox(height: 52, child: FilledButton(onPressed: _sending ? null : _submitOffer, child: _sending ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('إرسال العرض'))),
+        ] else
+          const Card(child: Padding(padding: EdgeInsets.all(18), child: Text('هذا الطلب لم يعد متاحاً للتقديم.'))),
+      ]),
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-              width: 100,
-              child: Text(label,
-                  style: const TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(child: Text(value)),
-        ],
-      ),
-    );
-  }
+  Widget _row(String label, String value) => Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 95, child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold))), Expanded(child: Text(value))]));
 }
