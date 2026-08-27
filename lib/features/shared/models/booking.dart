@@ -33,28 +33,46 @@ class Booking {
     required this.updatedAt,
   });
 
+  static DateTime _date(dynamic value, {DateTime? fallback}) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value) ?? (fallback ?? DateTime.now());
+    return fallback ?? DateTime.now();
+  }
+
+  static double _double(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static int _int(dynamic value) {
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
   factory Booking.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    final raw = doc.data();
+    final data = raw is Map<String, dynamic> ? raw : <String, dynamic>{};
+    final now = DateTime.now();
     return Booking(
       id: doc.id,
-      clientId: data['clientId'] ?? '',
-      nurseId: data['nurseId'] ?? '',
-      careRequestId: data['careRequestId'] ?? '',
-      shiftStart: (data['shiftStart'] as Timestamp).toDate(),
-      shiftEnd: (data['shiftEnd'] as Timestamp).toDate(),
-      shiftHours: data['shiftHours'] ?? 0,
-      pricePerHour: (data['pricePerHour'] ?? 0).toDouble(),
-      platformFee: (data['platformFee'] ?? 0).toDouble(),
-      totalAmount: (data['totalAmount'] ?? 0).toDouble(),
-      status: data['status'] ?? 'pending_payment',
-      paymentStatus: data['paymentStatus'] ?? 'unpaid',
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      clientId: data['clientId']?.toString() ?? '',
+      nurseId: data['nurseId']?.toString() ?? '',
+      careRequestId: data['careRequestId']?.toString() ?? '',
+      shiftStart: _date(data['shiftStart']),
+      shiftEnd: _date(data['shiftEnd']),
+      shiftHours: _int(data['shiftHours']),
+      pricePerHour: _double(data['pricePerHour']),
+      platformFee: _double(data['platformFee']),
+      totalAmount: _double(data['totalAmount']),
+      status: data['status']?.toString() ?? 'pending_payment',
+      paymentStatus: data['paymentStatus']?.toString() ?? 'unpaid',
+      createdAt: _date(data['createdAt'], fallback: now),
+      updatedAt: _date(data['updatedAt'], fallback: now),
     );
   }
 
   Map<String, dynamic> toMap() => {
-        'id': id,
         'clientId': clientId,
         'nurseId': nurseId,
         'careRequestId': careRequestId,
@@ -70,7 +88,6 @@ class Booking {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-  // ✅ دالة copyWith كاملة
   Booking copyWith({
     String? id,
     String? clientId,
