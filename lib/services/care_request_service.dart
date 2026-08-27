@@ -1,10 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../features/shared/models/care_request.dart';
 
 class CareRequestService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final CollectionReference _requestsCollection =
+  final CollectionReference<Map<String, dynamic>> _requestsCollection =
       FirebaseFirestore.instance.collection('careRequests');
 
   Future<String> createRequest(CareRequest request) async {
@@ -30,17 +28,27 @@ class CareRequestService {
   Future<List<CareRequest>> getClientRequests(String clientId) async {
     final snapshot = await _requestsCollection
         .where('clientId', isEqualTo: clientId)
-        .orderBy('createdAt', descending: true)
+        .limit(100)
         .get();
-    return snapshot.docs.map((doc) => CareRequest.fromFirestore(doc)).toList();
+    final requests = snapshot.docs.map(CareRequest.fromFirestore).toList();
+    requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return requests;
   }
 
-  Future<List<CareRequest>> getOpenRequests() async {
+  Future<List<CareRequest>> getOpenRequestsForGovernorates(
+    List<String> governorates,
+  ) async {
+    final values = governorates.where((e) => e.trim().isNotEmpty).toSet().toList();
+    if (values.isEmpty) return [];
+
     final snapshot = await _requestsCollection
         .where('status', isEqualTo: 'open')
-        .orderBy('createdAt', descending: true)
+        .where('governorate', whereIn: values.take(30).toList())
+        .limit(100)
         .get();
-    return snapshot.docs.map((doc) => CareRequest.fromFirestore(doc)).toList();
+    final requests = snapshot.docs.map(CareRequest.fromFirestore).toList();
+    requests.sort((a, b) => a.startDate.compareTo(b.startDate));
+    return requests;
   }
 }
 
