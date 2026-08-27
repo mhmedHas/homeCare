@@ -1,119 +1,3 @@
-// import 'package:flutter/material.dart';
-// import '../../../core/constants/app_colors.dart';
-// import '../../../services/auth_service.dart';
-// import '../../../services/user_service.dart';
-// import 'package:go_router/go_router.dart';
-
-// class ClientHomeScreen extends StatefulWidget {
-//   const ClientHomeScreen({super.key});
-
-//   @override
-//   State<ClientHomeScreen> createState() => _ClientHomeScreenState();
-// }
-
-// class _ClientHomeScreenState extends State<ClientHomeScreen> {
-//   String _userName = 'العميل';
-//   bool _isLoading = true;
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     _loadUser();
-//   }
-
-//   Future<void> _loadUser() async {
-//     final user = AuthService().currentUser;
-//     if (user != null) {
-//       final appUser = await UserService().getUser(user.uid);
-//       if (appUser != null && mounted) {
-//         setState(() {
-//           _userName = appUser.name;
-//           _isLoading = false;
-//         });
-//       } else {
-//         setState(() {
-//           _isLoading = false;
-//         });
-//       }
-//     } else {
-//       setState(() {
-//         _isLoading = false;
-//       });
-//     }
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       backgroundColor: AppColors.background,
-//       appBar: AppBar(
-//         title: const Text('الرئيسية'),
-//         actions: [
-//           IconButton(
-//               onPressed: () => context.go('/login'),
-//               icon: const Icon(Icons.logout)),
-//         ],
-//       ),
-//       body: _isLoading
-//           ? const Center(child: CircularProgressIndicator())
-//           : Padding(
-//               padding: const EdgeInsets.all(16.0),
-//               child: Column(
-//                 crossAxisAlignment: CrossAxisAlignment.start,
-//                 children: [
-//                   Text('أهلاً، $_userName 👋',
-//                       style: Theme.of(context).textTheme.headlineMedium),
-//                   const SizedBox(height: 8),
-//                   const Text(
-//                       'محتاج ممرض؟ أنشئ طلب رعاية واحنا نساعدك تلاقي الشخص المناسب.',
-//                       style: TextStyle(color: AppColors.textSecondary)),
-//                   const SizedBox(height: 24),
-//                   SizedBox(
-//                     width: double.infinity,
-//                     child: ElevatedButton.icon(
-//                       onPressed: () {
-//                         ScaffoldMessenger.of(context).showSnackBar(
-//                             const SnackBar(
-//                                 content: Text(
-//                                     'سيتم إضافة شاشة إنشاء الطلب قريباً')));
-//                       },
-//                       icon: const Icon(Icons.medical_services),
-//                       label: const Text('اطلب رعاية'),
-//                       style: ElevatedButton.styleFrom(
-//                           padding: const EdgeInsets.symmetric(vertical: 18)),
-//                     ),
-//                   ),
-//                   const SizedBox(height: 32),
-//                   const Text('الحجوزات القادمة',
-//                       style:
-//                           TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-//                   const SizedBox(height: 16),
-//                   Card(
-//                     child: ListTile(
-//                       title: const Text('لا توجد حجوزات حالية'),
-//                       subtitle: const Text('قم بإنشاء طلب جديد للبدء'),
-//                       leading: const Icon(Icons.info_outline),
-//                     ),
-//                   ),
-//                   const Spacer(),
-//                   const Center(
-//                       child: Text('تم بنجاح 🎉',
-//                           style: TextStyle(color: AppColors.success))),
-//                 ],
-//               ),
-//             ),
-//       bottomNavigationBar: BottomNavigationBar(
-//         items: const [
-//           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'الرئيسية'),
-//           BottomNavigationBarItem(icon: Icon(Icons.history), label: 'حجوزاتي'),
-//           BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'الرسائل'),
-//           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'حسابي'),
-//         ],
-//         currentIndex: 0,
-//       ),
-//     );
-//   }
-// }
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
@@ -140,172 +24,320 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   }
 
   Future<void> _loadUser() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
+
     try {
-      final user = AuthService().currentUser;
-      if (user == null) {
-        setState(() {
-          _errorMessage = 'يرجى تسجيل الدخول';
-        });
+      final firebaseUser = AuthService().currentUser;
+      if (firebaseUser == null) {
+        if (mounted) {
+          setState(() => _errorMessage = 'يرجى تسجيل الدخول');
+        }
         return;
       }
-      final appUser = await UserService().getUser(user.uid);
+
+      final appUser = await UserService().getUser(firebaseUser.uid);
       if (appUser == null) {
-        setState(() {
-          _errorMessage = 'بيانات المستخدم غير مكتملة';
-        });
+        if (mounted) {
+          setState(() => _errorMessage = 'بيانات المستخدم غير مكتملة');
+        }
         return;
       }
-      setState(() {
-        _user = appUser;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'حدث خطأ في تحميل البيانات';
-      });
+
+      if (mounted) {
+        setState(() => _user = appUser);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _errorMessage = 'حدث خطأ في تحميل البيانات');
+      }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const Text('الرئيسية'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
+            tooltip: 'تسجيل الخروج',
+            icon: const Icon(Icons.logout_outlined),
             onPressed: () async {
               await AuthService().logout();
-              if (mounted) context.go('/login');
+              if (context.mounted) context.go('/login');
             },
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _errorMessage!,
-                        style: const TextStyle(color: AppColors.error),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _loadUser,
-                        child: const Text('إعادة المحاولة'),
-                      ),
-                    ],
-                  ),
-                )
-              : Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // الترحيب
-                      Text(
-                        'أهلاً، ${_user?.name ?? 'العميل'} 👋',
-                        style: Theme.of(context).textTheme.headlineMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'محتاج ممرض؟ أنشئ طلب رعاية واحنا نساعدك تلاقي الشخص المناسب.',
-                        style: TextStyle(color: AppColors.textSecondary),
-                      ),
-                      const SizedBox(height: 24),
+      body: _buildBody(context, theme, colorScheme),
+    );
+  }
 
-                      // زر طلب رعاية (تم التعديل للانتقال إلى الشاشة الفعلية)
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            // ✅ الانتقال إلى شاشة إنشاء الطلب
-                            context.go('/client/create-request');
-                          },
-                          icon: const Icon(Icons.medical_services),
-                          label: const Text('اطلب رعاية'),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 32),
+  Widget _buildBody(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme colorScheme,
+  ) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-                      // قسم الحجوزات القادمة
-                      const Text(
-                        'الحجوزات القادمة',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 16),
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_off_outlined,
+                  size: 48, color: colorScheme.error),
+              const SizedBox(height: 12),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _loadUser,
+                icon: const Icon(Icons.refresh),
+                label: const Text('إعادة المحاولة'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
-                      // بطاقة الحجوزات (فارغة حالياً)
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.info_outline),
-                          title: const Text('لا توجد حجوزات حالية'),
-                          subtitle: const Text('قم بإنشاء طلب جديد للبدء'),
-                          trailing:
-                              const Icon(Icons.arrow_forward_ios, size: 16),
-                          onTap: () {
-                            // يمكن الانتقال إلى قائمة الحجوزات
-                            context.go('/client/my-bookings');
-                          },
-                        ),
-                      ),
-                      const Spacer(),
+    final name = _user?.name.trim().isNotEmpty == true
+        ? _user!.name.trim()
+        : 'العميل';
 
-                      // نص تجريبي للإشارة إلى أن التطبيق يعمل
-                      const Center(
-                        child: Text(
-                          'Foundation جاهز 🚀',
-                          style: TextStyle(color: AppColors.success),
-                        ),
-                      ),
-                    ],
-                  ),
+    return RefreshIndicator(
+      onRefresh: _loadUser,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        children: [
+          _WelcomeCard(name: name),
+          const SizedBox(height: 16),
+          _RequestCareCard(
+            onPressed: () => context.push('/client/create-request'),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'الوصول السريع',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _QuickAction(
+                  icon: Icons.calendar_month_outlined,
+                  title: 'حجوزاتي',
+                  onTap: () => context.go('/client/my-bookings'),
                 ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'الرئيسية'),
-          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'حجوزاتي'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'الرسائل'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'حسابي'),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _QuickAction(
+                  icon: Icons.chat_bubble_outline,
+                  title: 'الرسائل',
+                  onTap: () => context.go('/client/messages'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'الحجوزات القادمة',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            margin: EdgeInsets.zero,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => context.go('/client/my-bookings'),
+              child: const Padding(
+                padding: EdgeInsets.all(18),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      child: Icon(Icons.event_available_outlined),
+                    ),
+                    SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'لا توجد حجوزات حالية',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          SizedBox(height: 4),
+                          Text('عند وجود حجز سيظهر هنا تلقائيًا.'),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_left),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'كيف نساعدك؟',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'اطلب مقدم رعاية مناسب حسب احتياجات الحالة والوقت والمنطقة.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
         ],
-        currentIndex: 0,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: Colors.grey,
-        onTap: (index) {
-          switch (index) {
-            case 0:
-              // بالفعل في الرئيسية
-              break;
-            case 1:
-              context.go('/client/my-bookings');
-              break;
-            case 2:
-              // سيتم تفعيله لاحقاً
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('الرسائل قيد التطوير')),
-              );
-              break;
-            case 3:
-              context.go('/client/profile');
-              break;
-          }
-        },
+      ),
+    );
+  }
+}
+
+class _WelcomeCard extends StatelessWidget {
+  final String name;
+
+  const _WelcomeCard({required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            const CircleAvatar(
+              radius: 28,
+              child: Icon(Icons.person_outline, size: 30),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'أهلاً يا $name 👋',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text('إحنا هنا عشان نسهّل عليك رعاية الحالة في البيت.'),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RequestCareCard extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _RequestCareCard({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.medical_services_outlined, size: 34),
+            const SizedBox(height: 12),
+            Text(
+              'محتاج ممرض؟',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'أنشئ طلب رعاية وحدد احتياجات الحالة، وبعدها اختار مقدم الرعاية المناسب.',
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(Icons.add_circle_outline),
+                label: const Text('اطلب رعاية'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickAction extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  const _QuickAction({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          child: Column(
+            children: [
+              Icon(icon, size: 28),
+              const SizedBox(height: 8),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
       ),
     );
   }
