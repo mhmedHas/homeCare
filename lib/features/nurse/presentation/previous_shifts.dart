@@ -13,57 +13,60 @@ class PreviousShiftsScreen extends StatefulWidget {
   State<PreviousShiftsScreen> createState() => _PreviousShiftsScreenState();
 }
 
-class _PreviousShiftsScreenState extends State<PreviousShiftsScreen> {
+class _PreviousShiftsScreenState extends State<PreviousShiftsScreen>
+    with SingleTickerProviderStateMixin {
   List<Booking> _shifts = [];
   bool _isLoading = true;
   String? _errorMessage;
-  String _filter = 'all'; // all, completed, cancelled
+  late final TabController _tabController;
+  int _selectedTab = 0;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _loadShifts();
   }
 
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadShifts() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (mounted) setState(() { _isLoading = true; _errorMessage = null; });
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        setState(() {
-          _errorMessage = 'يرجى تسجيل الدخول';
-        });
-        return;
-      }
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) throw StateError('unauthenticated');
 
       final snapshot = await FirebaseFirestore.instance
           .collection('bookings')
-          .where('nurseId', isEqualTo: user.uid)
+          .where('nurseId', isEqualTo: uid)
           .where('status', whereIn: ['completed', 'cancelled', 'disputed'])
           .orderBy('createdAt', descending: true)
+          .limit(50)
           .get();
 
+      if (!mounted) return;
       setState(() {
-        _shifts =
-            snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList();
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'حدث خطأ';
-      });
-    } finally {
-      setState(() {
+        _shifts = snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList();
         _isLoading = false;
       });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'تعذر تحميل الشيفتات السابقة. حاول مرة أخرى.';
+          _isLoading = false;
+        });
+      }
     }
   }
 
   List<Booking> get _filteredShifts {
-    if (_filter == 'all') return _shifts;
-    return _shifts.where((b) => b.status == _filter).toList();
+    if (_selectedTab == 0) return _shifts;
+    final status = _selectedTab == 1 ? 'completed' : 'cancelled';
+    return _shifts.where((shift) => shift.status == status).toList();
   }
 
   @override
@@ -71,73 +74,88 @@ class _PreviousShiftsScreenState extends State<PreviousShiftsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('الشيفتات السابقة'),
+        actions: [
+          IconButton(onPressed: _loadShifts, icon: const Icon(Icons.refresh_outlined)),
+        ],
         bottom: TabBar(
-          tabs: [
-            const Tab(text: 'الكل'),
-            const Tab(text: 'مكتملة'),
-            const Tab(text: 'ملغاة'),
+          controller: _tabController,
+          onTap: (index) => setState(() => _selectedTab = index),
+          tabs: const [
+            Tab(text: 'الكل'),
+            Tab(text: 'مكتملة'),
+            Tab(text: 'ملغاة'),
           ],
-          onTap: (index) {
-            setState(() {
-              if (index == 0)
-                _filter = 'all';
-              else if (index == 1)
-                _filter = 'completed';
-              else if (index == 2) _filter = 'cancelled';
-            });
-          },
         ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
-              ? Center(
-                  child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                      Text(_errorMessage!,
-                          style: const TextStyle(color: AppColors.error)),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                          onPressed: _loadShifts,
-                          child: const Text('إعادة المحاولة')),
-                    ]))
+              ? _errorState()
               : _filteredShifts.isEmpty
-                  ? const Center(child: Text('لا توجد شيفتات'))
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(8),
-                      itemCount: _filteredShifts.length,
-                      itemBuilder: (context, index) {
-                        final shift = _filteredShifts[index];
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 6),
-                          child: ListTile(
-                            title: Text('شيفت #${shift.id.substring(0, 6)}'),
-                            subtitle: Text(
-                              '${DateFormat.yMMMd().format(shift.shiftStart)} | ${shift.totalAmount} ج.م',
-                            ),
-                            trailing: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: shift.status == 'completed'
-                                    ? AppColors.success
-                                    : AppColors.error,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                shift.status == 'completed' ? 'مكتمل' : 'ملغي',
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 10),
-                              ),
-                            ),
-                            onTap: () {
-                              context.go('/client/booking-details/${shift.id}');
-                            },
-                          ),
-                        );
-                      },
+                  ? RefreshIndicator(
+                      onRefresh: _loadShifts,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: const [
+                          SizedBox(height: 130),
+                          Icon(Icons.event_busy_outlined, size: 60),
+                          SizedBox(height: 14),
+                          Center(child: Text('لا توجد شيفتات سابقة')),
+                          SizedBox(height: 6),
+                          Center(child: Text('الشيفتات المكتملة أو الملغاة ستظهر هنا.')),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadShifts,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        itemCount: _filteredShifts.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (_, index) => _shiftCard(_filteredShifts[index]),
+                      ),
                     ),
+    );
+  }
+
+  Widget _errorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off_outlined, size: 56),
+            const SizedBox(height: 12),
+            Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.error)),
+            const SizedBox(height: 16),
+            FilledButton.icon(onPressed: _loadShifts, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _shiftCard(Booking shift) {
+    final shortId = shift.id.length > 6 ? shift.id.substring(0, 6) : shift.id;
+    final completed = shift.status == 'completed';
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: CircleAvatar(
+          backgroundColor: (completed ? AppColors.success : AppColors.error).withValues(alpha: 0.12),
+          child: Icon(completed ? Icons.check_circle_outline : Icons.cancel_outlined, color: completed ? AppColors.success : AppColors.error),
+        ),
+        title: Text('شيفت #$shortId', style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text('${DateFormat('dd/MM/yyyy – hh:mm a', 'ar').format(shift.shiftStart)}\n${shift.totalAmount.toStringAsFixed(2)} ج.م'),
+        isThreeLine: true,
+        trailing: Text(completed ? 'مكتمل' : 'ملغي', style: TextStyle(color: completed ? AppColors.success : AppColors.error, fontWeight: FontWeight.w700)),
+        onTap: shift.careRequestId.isEmpty
+            ? null
+            : () => context.push('/nurse/request-details/${shift.careRequestId}'),
+      ),
     );
   }
 }
