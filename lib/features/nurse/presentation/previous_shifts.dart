@@ -44,13 +44,14 @@ class _PreviousShiftsScreenState extends State<PreviousShiftsScreen>
           .collection('bookings')
           .where('nurseId', isEqualTo: uid)
           .where('status', whereIn: ['completed', 'cancelled', 'disputed'])
-          .orderBy('createdAt', descending: true)
           .limit(50)
           .get();
 
       if (!mounted) return;
+      final shifts = snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList();
+      shifts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       setState(() {
-        _shifts = snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList();
+        _shifts = shifts;
         _isLoading = false;
       });
     } catch (_) {
@@ -74,17 +75,11 @@ class _PreviousShiftsScreenState extends State<PreviousShiftsScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('الشيفتات السابقة'),
-        actions: [
-          IconButton(onPressed: _loadShifts, icon: const Icon(Icons.refresh_outlined)),
-        ],
+        actions: [IconButton(onPressed: _loadShifts, icon: const Icon(Icons.refresh_outlined))],
         bottom: TabBar(
           controller: _tabController,
           onTap: (index) => setState(() => _selectedTab = index),
-          tabs: const [
-            Tab(text: 'الكل'),
-            Tab(text: 'مكتملة'),
-            Tab(text: 'ملغاة'),
-          ],
+          tabs: const [Tab(text: 'الكل'), Tab(text: 'مكتملة'), Tab(text: 'ملغاة')],
         ),
       ),
       body: _isLoading
@@ -119,23 +114,21 @@ class _PreviousShiftsScreenState extends State<PreviousShiftsScreen>
     );
   }
 
-  Widget _errorState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.cloud_off_outlined, size: 56),
-            const SizedBox(height: 12),
-            Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.error)),
-            const SizedBox(height: 16),
-            FilledButton.icon(onPressed: _loadShifts, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة')),
-          ],
+  Widget _errorState() => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_outlined, size: 56),
+              const SizedBox(height: 12),
+              Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.error)),
+              const SizedBox(height: 16),
+              FilledButton.icon(onPressed: _loadShifts, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة')),
+            ],
+          ),
         ),
-      ),
-    );
-  }
+      );
 
   Widget _shiftCard(Booking shift) {
     final shortId = shift.id.length > 6 ? shift.id.substring(0, 6) : shift.id;
@@ -152,9 +145,7 @@ class _PreviousShiftsScreenState extends State<PreviousShiftsScreen>
         subtitle: Text('${DateFormat('dd/MM/yyyy – hh:mm a', 'ar').format(shift.shiftStart)}\n${shift.totalAmount.toStringAsFixed(2)} ج.م'),
         isThreeLine: true,
         trailing: Text(completed ? 'مكتمل' : 'ملغي', style: TextStyle(color: completed ? AppColors.success : AppColors.error, fontWeight: FontWeight.w700)),
-        onTap: shift.careRequestId.isEmpty
-            ? null
-            : () => context.push('/nurse/request-details/${shift.careRequestId}'),
+        onTap: shift.careRequestId.isEmpty ? null : () => context.push('/nurse/request-details/${shift.careRequestId}'),
       ),
     );
   }
