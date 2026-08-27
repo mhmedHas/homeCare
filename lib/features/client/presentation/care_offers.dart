@@ -30,12 +30,9 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) throw Exception('auth');
-
       final db = FirebaseFirestore.instance;
       final requestSnap = await db.collection('careRequests').doc(widget.requestId).get();
-      if (!requestSnap.exists || requestSnap.data()?['clientId'] != uid) {
-        throw Exception('not allowed');
-      }
+      if (!requestSnap.exists || requestSnap.data()?['clientId'] != uid) throw Exception('not allowed');
 
       final offersSnap = await db
           .collection('careOffers')
@@ -50,21 +47,13 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
         return aPrice.compareTo(bPrice);
       });
 
-      if (mounted) {
-        setState(() {
-          _request = CareRequest.fromFirestore(requestSnap);
-          _offers = offers;
-          _loading = false;
-        });
-      }
+      if (mounted) setState(() {
+        _request = CareRequest.fromFirestore(requestSnap);
+        _offers = offers;
+        _loading = false;
+      });
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _request = null;
-          _offers = [];
-          _loading = false;
-        });
-      }
+      if (mounted) setState(() { _request = null; _offers = []; _loading = false; });
     }
   }
 
@@ -82,7 +71,6 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
       final bookingRef = db.collection('bookings').doc();
 
       await db.runTransaction((tx) async {
-        // Every read is intentionally completed before any write.
         final reqSnap = await tx.get(requestRef);
         final selectedOfferSnap = await tx.get(offerRef);
         final allOffersSnap = await tx.get(
@@ -92,19 +80,12 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
               .limit(50),
         );
 
-        if (!reqSnap.exists || reqSnap.data()?['clientId'] != uid) {
-          throw Exception('not allowed');
-        }
-        if (reqSnap.data()?['status'] != 'open') {
-          throw Exception('closed');
-        }
+        if (!reqSnap.exists || reqSnap.data()?['clientId'] != uid) throw Exception('not allowed');
+        if (reqSnap.data()?['status'] != 'open') throw Exception('closed');
         if (!selectedOfferSnap.exists) throw Exception('offer missing');
 
         final offerData = selectedOfferSnap.data()!;
-        if (offerData['requestId'] != request.id ||
-            offerData['status'] != 'pending') {
-          throw Exception('offer unavailable');
-        }
+        if (offerData['requestId'] != request.id || offerData['status'] != 'pending') throw Exception('offer unavailable');
 
         final nurseId = offerData['nurseId']?.toString() ?? '';
         final selectedPrice = (offerData['proposedPrice'] as num?)?.toDouble() ?? 0;
@@ -116,17 +97,11 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
         final hour = int.tryParse(timeParts.first) ?? 8;
         final minute = int.tryParse(timeParts.length > 1 ? timeParts[1] : '0') ?? 0;
 
-        if (nurseId.isEmpty || selectedPrice <= 0 || !CareRequest.allowedShiftHours.contains(hours)) {
-          throw Exception('invalid offer');
-        }
+        if (nurseId.isEmpty || selectedPrice <= 0 || !CareRequest.allowedShiftHours.contains(hours)) throw Exception('invalid offer');
 
-        final shiftStart = DateTime(
-          startDate.year,
-          startDate.month,
-          startDate.day,
-          hour.clamp(0, 23),
-          minute.clamp(0, 59),
-        );
+        final safeHour = hour.clamp(0, 23).toInt();
+        final safeMinute = minute.clamp(0, 59).toInt();
+        final shiftStart = DateTime(startDate.year, startDate.month, startDate.day, safeHour, safeMinute);
         final base = selectedPrice * days;
         final platformFee = base * 0.10;
 
@@ -136,18 +111,11 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
           'selectedOfferId': offer.id,
           'updatedAt': FieldValue.serverTimestamp(),
         });
-
-        tx.update(offerRef, {
-          'status': 'accepted',
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+        tx.update(offerRef, {'status': 'accepted', 'updatedAt': FieldValue.serverTimestamp()});
 
         for (final other in allOffersSnap.docs) {
           if (other.id == offer.id) continue;
-          tx.update(other.reference, {
-            'status': 'rejected',
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+          tx.update(other.reference, {'status': 'rejected', 'updatedAt': FieldValue.serverTimestamp()});
         }
 
         tx.set(bookingRef, {
@@ -170,14 +138,10 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
         });
       });
 
-      if (mounted) {
-        context.go('/client/payment/${bookingRef.id}');
-      }
+      if (mounted) context.go('/client/payment/${bookingRef.id}');
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('العرض لم يعد متاحًا. حدّث الصفحة وحاول مرة أخرى.')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('العرض لم يعد متاحًا. حدّث الصفحة وحاول مرة أخرى.')));
         await _load();
       }
     } finally {
@@ -187,67 +151,45 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-    if (_request == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('عروض الممرضين')),
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline, size: 56),
-              const SizedBox(height: 12),
-              const Text('تعذر تحميل الطلب أو لم يعد متاحًا.'),
-              const SizedBox(height: 12),
-              FilledButton(onPressed: _load, child: const Text('إعادة المحاولة')),
-            ],
-          ),
-        ),
-      );
-    }
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_request == null) return Scaffold(
+      appBar: AppBar(title: const Text('عروض الممرضين')),
+      body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.error_outline, size: 56),
+        const SizedBox(height: 12),
+        const Text('تعذر تحميل الطلب أو لم يعد متاحًا.'),
+        const SizedBox(height: 12),
+        FilledButton(onPressed: _load, child: const Text('إعادة المحاولة')),
+      ])),
+    );
 
     final closed = _request!.status != 'open';
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('عروض الممرضين'),
-        actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))],
-      ),
+      appBar: AppBar(title: const Text('عروض الممرضين'), actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))]),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           children: [
-            if (closed)
-              Card(
-                color: AppColors.primaryLight,
-                child: const Padding(
-                  padding: EdgeInsets.all(14),
-                  child: Row(children: [
-                    Icon(Icons.check_circle_outline, color: AppColors.primary),
-                    SizedBox(width: 10),
-                    Expanded(child: Text('تم اختيار مقدم الرعاية لهذا الطلب.')),
-                  ]),
-                ),
-              ),
+            if (closed) Card(
+              color: AppColors.primaryLight,
+              child: const Padding(padding: EdgeInsets.all(14), child: Row(children: [
+                Icon(Icons.check_circle_outline, color: AppColors.primary),
+                SizedBox(width: 10),
+                Expanded(child: Text('تم اختيار مقدم الرعاية لهذا الطلب.')),
+              ])),
+            ),
             if (_offers.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 110),
-                child: Column(children: [
-                  Icon(Icons.inbox_outlined, size: 64),
-                  SizedBox(height: 12),
-                  Text('لسه مفيش عروض على طلبك', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  Text('عندما يقدم ممرض عرضًا سيظهر هنا.'),
-                ]),
-              )
+              const Padding(padding: EdgeInsets.only(top: 110), child: Column(children: [
+                Icon(Icons.inbox_outlined, size: 64),
+                SizedBox(height: 12),
+                Text('لسه مفيش عروض على طلبك', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                SizedBox(height: 8),
+                Text('عندما يقدم ممرض عرضًا سيظهر هنا.'),
+              ]))
             else
-              ..._offers.map((offer) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _card(offer, disabled: closed),
-                  )),
+              ..._offers.map((offer) => Padding(padding: const EdgeInsets.only(bottom: 10), child: _card(offer, disabled: closed))),
           ],
         ),
       ),
@@ -260,55 +202,35 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
     final price = (d['proposedPrice'] as num?)?.toDouble() ?? 0;
     final exp = d['nurseExperienceYears'] ?? 0;
     final photo = d['nursePhotoUrl']?.toString();
-
     return Card(
       margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            CircleAvatar(
-              backgroundImage: photo != null && photo.isNotEmpty ? NetworkImage(photo) : null,
-              child: photo == null || photo.isEmpty ? const Icon(Icons.person) : null,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(d['nurseName']?.toString() ?? 'ممرض', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-                const SizedBox(height: 4),
-                Row(children: [
-                  if (d['nurseVerified'] == true) const Icon(Icons.verified, size: 16, color: AppColors.success),
-                  if (d['nurseVerified'] == true) const SizedBox(width: 4),
-                  Text(rating > 0 ? '${rating.toStringAsFixed(1)} ⭐' : 'بدون تقييم'),
-                  const SizedBox(width: 10),
-                  Text('$exp سنوات خبرة'),
-                ]),
-              ]),
-            ),
-            Text('${price.toStringAsFixed(0)} ج.م', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary)),
-          ]),
-          const SizedBox(height: 4),
-          const Text('سعر الشيفت الواحد', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          if ((d['note'] ?? '').toString().trim().isNotEmpty)
-            Padding(padding: const EdgeInsets.only(top: 12), child: Text(d['note'].toString())),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => context.push('/client/nurse-profile/${d['nurseId']}?requestId=${widget.requestId}'),
-                child: const Text('عرض الملف'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: FilledButton(
-                onPressed: disabled || _accepting ? null : () => _accept(offer),
-                child: Text(_accepting ? 'جاري الاختيار...' : 'اختيار الممرض'),
-              ),
-            ),
-          ]),
+      child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          CircleAvatar(backgroundImage: photo != null && photo.isNotEmpty ? NetworkImage(photo) : null, child: photo == null || photo.isEmpty ? const Icon(Icons.person) : null),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(d['nurseName']?.toString() ?? 'ممرض', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            const SizedBox(height: 4),
+            Row(children: [
+              if (d['nurseVerified'] == true) const Icon(Icons.verified, size: 16, color: AppColors.success),
+              if (d['nurseVerified'] == true) const SizedBox(width: 4),
+              Text(rating > 0 ? '${rating.toStringAsFixed(1)} ⭐' : 'بدون تقييم'),
+              const SizedBox(width: 10),
+              Text('$exp سنوات خبرة'),
+            ]),
+          ])),
+          Text('${price.toStringAsFixed(0)} ج.م', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary)),
         ]),
-      ),
+        const SizedBox(height: 4),
+        const Text('سعر الشيفت الواحد', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+        if ((d['note'] ?? '').toString().trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 12), child: Text(d['note'].toString())),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: OutlinedButton(onPressed: () => context.push('/client/nurse-profile/${d['nurseId']}?requestId=${widget.requestId}'), child: const Text('عرض الملف'))),
+          const SizedBox(width: 10),
+          Expanded(child: FilledButton(onPressed: disabled || _accepting ? null : () => _accept(offer), child: Text(_accepting ? 'جاري الاختيار...' : 'اختيار الممرض'))),
+        ]),
+      ])),
     );
   }
 }
