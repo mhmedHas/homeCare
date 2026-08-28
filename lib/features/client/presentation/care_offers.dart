@@ -18,11 +18,36 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
   bool _accepting = false;
   CareRequest? _request;
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _offers = [];
+  final Map<String, String> _nursePhotos = {};
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  Future<void> _loadNursePhotos(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> offers,
+  ) async {
+    _nursePhotos.clear();
+    final nurseIds = offers
+        .map((offer) => offer.data()['nurseId']?.toString() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+
+    await Future.wait(nurseIds.map((nurseId) async {
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('nurseProfiles')
+            .doc(nurseId)
+            .get();
+        final photo = snap.data()?['photoUrl']?.toString().trim() ?? '';
+        if (photo.isNotEmpty) _nursePhotos[nurseId] = photo;
+      } catch (_) {
+        // The offer's own photo, when present, remains the fallback.
+      }
+    }));
   }
 
   Future<void> _load() async {
@@ -32,7 +57,9 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
       if (uid == null) throw Exception('auth');
       final db = FirebaseFirestore.instance;
       final requestSnap = await db.collection('careRequests').doc(widget.requestId).get();
-      if (!requestSnap.exists || requestSnap.data()?['clientId'] != uid) throw Exception('not allowed');
+      if (!requestSnap.exists || requestSnap.data()?['clientId'] != uid) {
+        throw Exception('not allowed');
+      }
 
       final offersSnap = await db
           .collection('careOffers')
@@ -44,6 +71,7 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
         final status = doc.data()['status']?.toString() ?? '';
         return status == 'pending' || status == 'accepted';
       }).toList();
+
       offers.sort((a, b) {
         final aAccepted = a.data()['status'] == 'accepted';
         final bAccepted = b.data()['status'] == 'accepted';
@@ -53,6 +81,8 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
         return aPrice.compareTo(bPrice);
       });
 
+      await _loadNursePhotos(offers);
+
       if (mounted) {
         setState(() {
           _request = CareRequest.fromFirestore(requestSnap);
@@ -61,7 +91,14 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() { _request = null; _offers = []; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _request = null;
+          _offers = [];
+          _nursePhotos.clear();
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -78,10 +115,6 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
       final offerRef = db.collection('careOffers').doc(offer.id);
       final bookingRef = db.collection('bookings').doc();
 
-      // Firestore transactions can only read DocumentReference values with tx.get().
-      // QuerySnapshot queries (which expose .docs) are not supported inside a transaction.
-      // Read the pending offers before the transaction, then reject them with a batch
-      // after the transaction has atomically accepted the selected offer.
       final pendingOffersSnap = await db
           .collection('careOffers')
           .where('requestId', isEqualTo: request.id)
@@ -98,7 +131,9 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
         if (!selectedOfferSnap.exists) throw Exception('offer missing');
 
         final offerData = selectedOfferSnap.data()!;
-        if (offerData['requestId'] != request.id || offerData['status'] != 'pending') throw Exception('offer unavailable');
+        if (offerData['requestId'] != request.id || offerData['status'] != 'pending') {
+          throw Exception('offer unavailable');
+        }
 
         final nurseId = offerData['nurseId']?.toString() ?? '';
         final selectedPrice = (offerData['proposedPrice'] as num?)?.toDouble() ?? 0;
@@ -151,7 +186,6 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
         });
       });
 
-      // Reject the other offers only after the transaction succeeds.
       final batch = db.batch();
       var rejectedCount = 0;
       for (final other in pendingOffersSnap.docs) {
@@ -240,10 +274,8 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
                   children: [
                     Icon(Icons.inbox_outlined, size: 64),
                     SizedBox(height: 12),
-                    Text(
-                      'لسه مفيش عروض على طلبك',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
+                    Text('لسه مفيش عروض على طلبك',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     SizedBox(height: 8),
                     Text('عندما يقدم ممرض عرضًا سيظهر هنا.'),
                   ],
@@ -272,7 +304,9 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
     final rating = (d['nurseRating'] as num?)?.toDouble() ?? 0;
     final price = (d['proposedPrice'] as num?)?.toDouble() ?? 0;
     final exp = d['nurseExperienceYears'] ?? 0;
-    final photo = d['nursePhotoUrl']?.toString();
+    final nurseId = d['nurseId']?.toString() ?? '';
+    final storedPhoto = d['nursePhotoUrl']?.toString().trim() ?? '';
+    final photo = _nursePhotos[nurseId] ?? storedPhoto;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -289,18 +323,24 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
                   color: AppColors.success.withValues(alpha: .10),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Text(
-                  '✓ الممرض المختار',
-                  style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold),
-                ),
+                child: const Text('✓ الممرض المختار',
+                    style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(height: 12),
             ],
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  backgroundImage: photo != null && photo.isNotEmpty ? NetworkImage(photo) : null,
-                  child: photo == null || photo.isEmpty ? const Icon(Icons.person) : null,
+                GestureDetector(
+                  onTap: photo.isEmpty ? null : () => _showPhoto(photo),
+                  child: CircleAvatar(
+                    radius: 30,
+                    backgroundColor: AppColors.primaryLight,
+                    backgroundImage: photo.isNotEmpty ? NetworkImage(photo) : null,
+                    child: photo.isEmpty
+                        ? const Icon(Icons.person, size: 30)
+                        : null,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -336,10 +376,8 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
               ],
             ),
             const SizedBox(height: 4),
-            const Text(
-              'سعر الشيفت الواحد',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-            ),
+            const Text('سعر الشيفت الواحد',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
             if ((d['note'] ?? '').toString().trim().isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
@@ -350,9 +388,11 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => context.push(
-                      '/client/nurse-profile/${d['nurseId']}?requestId=${widget.requestId}',
-                    ),
+                    onPressed: nurseId.isEmpty
+                        ? null
+                        : () => context.push(
+                              '/client/nurse-profile/$nurseId?requestId=${widget.requestId}',
+                            ),
                     child: const Text('عرض الملف والتقييمات'),
                   ),
                 ),
@@ -368,6 +408,25 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showPhoto(String url) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => Dialog(
+        clipBehavior: Clip.antiAlias,
+        child: InteractiveViewer(
+          child: Image.network(
+            url,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Padding(
+              padding: EdgeInsets.all(40),
+              child: Icon(Icons.broken_image_outlined, size: 60),
+            ),
+          ),
         ),
       ),
     );
