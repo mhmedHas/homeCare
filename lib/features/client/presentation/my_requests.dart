@@ -49,13 +49,15 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
               ? _errorView()
               : RefreshIndicator(
                   onRefresh: _load,
-                  child: _requests.isEmpty ? _empty() : ListView.separated(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _requests.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (_, i) => _card(_requests[i]),
-                  ),
+                  child: _requests.isEmpty
+                      ? _empty()
+                      : ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+                          itemCount: _requests.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          itemBuilder: (_, i) => _card(_requests[i]),
+                        ),
                 ),
     );
   }
@@ -63,30 +65,61 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
   Widget _card(CareRequest request) {
     final shortId = request.id.length > 6 ? request.id.substring(0, 6) : request.id;
     final status = _status(request.status);
+    final canSeeOffers = request.status == 'open';
+    final hasSelectedNurse = request.status == 'booked' ||
+        request.status == 'in_progress' ||
+        request.status == 'completed';
+
     return Card(
       margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
         onTap: () => context.push('/client/request-details/${request.id}'),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              CircleAvatar(backgroundColor: AppColors.primaryLight, child: Icon(Icons.medical_services_outlined, color: AppColors.primary)),
+              CircleAvatar(
+                backgroundColor: AppColors.primaryLight,
+                child: Icon(Icons.medical_services_outlined, color: AppColors.primary),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: Text('طلب #$shortId', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+              Expanded(
+                child: Text('طلب #$shortId', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
               _Badge(text: status.$1, color: status.$2),
             ]),
             const SizedBox(height: 12),
-            Text(request.careType, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(request.careType, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
             const SizedBox(height: 7),
-            Text('${request.shiftHours} ساعة × ${request.daysCount} يوم • ${request.governorate} - ${request.area}', style: const TextStyle(color: AppColors.textSecondary)),
+            Text(
+              '${request.shiftHours} ساعة × ${request.daysCount} يوم • ${request.governorate} - ${request.area}',
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
             const SizedBox(height: 5),
-            Text(DateFormat('d/M/yyyy', 'ar').format(request.startDate), style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-            if (request.status == 'open') ...[
-              const SizedBox(height: 12),
-              SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: () => context.push('/client/request-offers/${request.id}'), icon: const Icon(Icons.people_outline), label: const Text('عرض عروض الممرضين'))),
-            ],
+            Text(
+              DateFormat('d/M/yyyy', 'ar').format(request.startDate),
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 14),
+            if (canSeeOffers)
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => context.push('/client/request-offers/${request.id}'),
+                  icon: const Icon(Icons.people_outline),
+                  label: const Text('عرض الممرضين والعروض'),
+                ),
+              )
+            else if (hasSelectedNurse)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => context.push('/client/request-offers/${request.id}'),
+                  icon: const Icon(Icons.person_search_outlined),
+                  label: const Text('عرض الممرض المختار والحجز'),
+                ),
+              ),
           ]),
         ),
       ),
@@ -95,26 +128,30 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
 
   Widget _empty() => ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
-          SizedBox(height: 120),
-          Icon(Icons.post_add_outlined, size: 64),
-          SizedBox(height: 14),
-          Center(child: Text('لا توجد طلبات رعاية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-          SizedBox(height: 8),
-          Center(child: Text('أنشئ طلبًا ليبدأ الممرضون بتقديم عروضهم.')),
+        children: [
+          const SizedBox(height: 110),
+          const Icon(Icons.post_add_outlined, size: 64),
+          const SizedBox(height: 14),
+          const Center(child: Text('لا توجد طلبات رعاية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+          const SizedBox(height: 8),
+          const Center(child: Padding(padding: EdgeInsets.symmetric(horizontal: 30), child: Text('أنشئ طلب رعاية ليبدأ الممرضون بتقديم عروضهم.', textAlign: TextAlign.center))),
+          const SizedBox(height: 20),
+          Center(child: FilledButton.icon(onPressed: () => context.push('/client/create-request'), icon: const Icon(Icons.add), label: const Text('إنشاء طلب رعاية'))),
         ],
       );
 
-  Widget _errorView() => Center(child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.cloud_off_outlined, size: 52, color: AppColors.error),
-          const SizedBox(height: 12),
-          Text(_error!, textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          FilledButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة')),
-        ]),
-      ));
+  Widget _errorView() => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.cloud_off_outlined, size: 52, color: AppColors.error),
+            const SizedBox(height: 12),
+            Text(_error!, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة')),
+          ]),
+        ),
+      );
 
   (String, Color) _status(String value) {
     switch (value) {
