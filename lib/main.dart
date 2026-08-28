@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/constants/app_theme.dart';
 import 'core/routing/app_router.dart';
 import 'services/firebase_service.dart';
 import 'services/shared_preferences_service.dart';
+
+const String supabaseUrl = 'https://ccaoalnicofolubsyovw.supabase.co';
+const String supabasePublishableKey =
+    'sb_publishable_QWSPbkX-6xEM-7bsGxYX4Q_0Z_4aOdH';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +19,11 @@ Future<void> main() async {
 
   await FirebaseService().init();
   await SharedPreferencesService().init();
+
+  await Supabase.initialize(
+    url: supabaseUrl,
+    publishableKey: supabasePublishableKey,
+  );
 
   runApp(const ProviderScope(child: MyApp()));
 }
