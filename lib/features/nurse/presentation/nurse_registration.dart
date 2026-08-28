@@ -1,5 +1,6 @@
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -13,8 +14,7 @@ class NurseRegistrationScreen extends StatefulWidget {
   const NurseRegistrationScreen({super.key});
 
   @override
-  State<NurseRegistrationScreen> createState() =>
-      _NurseRegistrationScreenState();
+  State<NurseRegistrationScreen> createState() => _NurseRegistrationScreenState();
 }
 
 class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
@@ -37,48 +37,24 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
   String? _errorMessage;
 
   final List<String> _governorates = [
-    'القاهرة',
-    'الإسكندرية',
-    'الجيزة',
-    'القليوبية',
-    'الشرقية',
-    'الدقهلية',
-    'المنوفية',
-    'الغربية',
+    'القاهرة', 'الإسكندرية', 'الجيزة', 'القليوبية',
+    'الشرقية', 'الدقهلية', 'المنوفية', 'الغربية',
   ];
 
   final List<String> _areas = [
-    'مدينة نصر',
-    'مصر الجديدة',
-    'الزمالك',
-    'الدقي',
-    'المهندسين',
-    'مصر القديمة',
-    'المعادي',
-    'الهرم',
+    'مدينة نصر', 'مصر الجديدة', 'الزمالك', 'الدقي',
+    'المهندسين', 'مصر القديمة', 'المعادي', 'الهرم',
   ];
 
   final List<String> _specializations = [
-    'تمريض عام',
-    'تمريض طوارئ',
-    'تمريض عناية مركزة',
-    'تمريض أطفال',
-    'تمريض كبار السن',
-    'تمريض منازل',
-    'تمريض عمليات',
+    'تمريض عام', 'تمريض طوارئ', 'تمريض عناية مركزة', 'تمريض أطفال',
+    'تمريض كبار السن', 'تمريض منازل', 'تمريض عمليات',
   ];
 
   final List<String> _allServices = [
-    'متابعة الحالة',
-    'إعطاء الأدوية',
-    'قياس الضغط',
-    'قياس السكر',
-    'تغيير الجروح',
-    'مساعدة الحركة',
-    'رعاية كبار السن',
-    'رعاية ما بعد العمليات',
-    'تمريض الأطفال',
-    'العناية بالتنفس',
+    'متابعة الحالة', 'إعطاء الأدوية', 'قياس الضغط', 'قياس السكر',
+    'تغيير الجروح', 'مساعدة الحركة', 'رعاية كبار السن',
+    'رعاية ما بعد العمليات', 'تمريض الأطفال', 'العناية بالتنفس',
   ];
 
   Future<void> _pickProfileImage() async {
@@ -98,9 +74,7 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
         });
       }
     } catch (_) {
-      if (mounted) {
-        setState(() => _errorMessage = 'تعذر اختيار الصورة. حاول مرة أخرى.');
-      }
+      if (mounted) setState(() => _errorMessage = 'تعذر اختيار الصورة. حاول مرة أخرى.');
     } finally {
       if (mounted) setState(() => _isPickingImage = false);
     }
@@ -109,10 +83,8 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
   Future<String?> _uploadProfileImage(String uid) async {
     final image = _profileImage;
     if (image == null) return null;
-
     final bytes = await image.readAsBytes();
     if (bytes.isEmpty) throw Exception('empty_image');
-
     return _storageService.uploadNurseProfilePhoto(
       uid: uid,
       bytes: bytes,
@@ -143,9 +115,7 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
       }
 
       final photoUrl = await _uploadProfileImage(user.uid);
-      if (photoUrl == null || photoUrl.isEmpty) {
-        throw Exception('photo_upload_failed');
-      }
+      if (photoUrl == null || photoUrl.isEmpty) throw Exception('photo_upload_failed');
 
       await UserService().updateUser(user.uid, {
         'name': _nameController.text.trim(),
@@ -155,16 +125,12 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      await FirebaseFirestore.instance
-          .collection('nurseProfiles')
-          .doc(user.uid)
-          .set({
+      await FirebaseFirestore.instance.collection('nurseProfiles').doc(user.uid).set({
         'uid': user.uid,
         'name': _nameController.text.trim(),
         'photoUrl': photoUrl,
         'specialization': _selectedSpecialization,
-        'experienceYears':
-            int.tryParse(_experienceController.text.trim()) ?? 0,
+        'experienceYears': int.tryParse(_experienceController.text.trim()) ?? 0,
         'services': List<String>.from(_selectedServices),
         'workAreas': List<String>.from(_selectedWorkAreas),
         'governorate': _selectedGovernorate,
@@ -177,13 +143,11 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
       });
 
       await SharedPreferencesService().clearTempPreferences();
-
       if (mounted) context.go('/nurse/verification-status');
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        setState(() {
-          _errorMessage = 'تعذر حفظ البيانات والصورة. تأكد من إعداد Storage ثم حاول مرة أخرى.';
-        });
+        setState(() => _errorMessage =
+            'تعذر حفظ البيانات والصورة. تأكد من إعداد Storage ثم حاول مرة أخرى.');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -210,164 +174,120 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
           child: SingleChildScrollView(
             child: Column(
               children: [
-                const Icon(
-                  Icons.medical_services,
-                  size: 60,
-                  color: AppColors.primary,
-                ),
+                const Icon(Icons.medical_services, size: 60, color: AppColors.primary),
                 const SizedBox(height: 16),
-                const Text(
-                  'أكمل بياناتك المهنية',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
+                const Text('أكمل بياناتك المهنية',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 20),
                 _buildProfilePhotoPicker(),
                 const SizedBox(height: 24),
                 TextFormField(
                   controller: _nameController,
                   decoration: const InputDecoration(
-                    labelText: 'الاسم كاملاً',
-                    prefixIcon: Icon(Icons.person),
+                    labelText: 'الاسم كاملاً', prefixIcon: Icon(Icons.person),
                   ),
-                  validator: (v) => v == null || v.trim().length < 2
-                      ? 'الاسم مطلوب'
-                      : null,
+                  validator: (v) => v == null || v.trim().length < 2 ? 'الاسم مطلوب' : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
                   decoration: const InputDecoration(
-                    labelText: 'رقم الهاتف',
-                    prefixIcon: Icon(Icons.phone),
+                    labelText: 'رقم الهاتف', prefixIcon: Icon(Icons.phone),
                   ),
-                  validator: (v) => v == null || v.trim().length < 10
-                      ? 'رقم هاتف غير صحيح'
-                      : null,
+                  validator: (v) => v == null || v.trim().length < 10 ? 'رقم هاتف غير صحيح' : null,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedGovernorate,
                   decoration: const InputDecoration(
-                    labelText: 'المحافظة',
-                    prefixIcon: Icon(Icons.location_city),
+                    labelText: 'المحافظة', prefixIcon: Icon(Icons.location_city),
                   ),
-                  items: _governorates
-                      .map((g) => DropdownMenuItem(value: g, child: Text(g)))
-                      .toList(),
-                  onChanged: (v) =>
-                      setState(() => _selectedGovernorate = v),
+                  items: _governorates.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                  onChanged: (v) => setState(() => _selectedGovernorate = v),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedArea,
                   decoration: const InputDecoration(
-                    labelText: 'المنطقة',
-                    prefixIcon: Icon(Icons.location_on),
+                    labelText: 'المنطقة', prefixIcon: Icon(Icons.location_on),
                   ),
-                  items: _areas
-                      .map((a) => DropdownMenuItem(value: a, child: Text(a)))
-                      .toList(),
+                  items: _areas.map((a) => DropdownMenuItem(value: a, child: Text(a))).toList(),
                   onChanged: (v) => setState(() => _selectedArea = v),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedSpecialization,
                   decoration: const InputDecoration(
-                    labelText: 'التخصص',
-                    prefixIcon: Icon(Icons.medical_information),
+                    labelText: 'التخصص', prefixIcon: Icon(Icons.medical_information),
                   ),
-                  items: _specializations
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                      .toList(),
-                  onChanged: (v) =>
-                      setState(() => _selectedSpecialization = v),
+                  items: _specializations.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                  onChanged: (v) => setState(() => _selectedSpecialization = v),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _experienceController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    labelText: 'سنوات الخبرة',
-                    prefixIcon: Icon(Icons.timeline),
+                    labelText: 'سنوات الخبرة', prefixIcon: Icon(Icons.timeline),
                   ),
-                  validator: (v) => v == null || v.trim().isEmpty
-                      ? 'الخبرة مطلوبة'
-                      : null,
+                  validator: (v) => v == null || v.trim().isEmpty ? 'الخبرة مطلوبة' : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _priceController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    labelText: 'السعر المتوقع (ج.م/ساعة)',
-                    prefixIcon: Icon(Icons.money),
+                    labelText: 'السعر المتوقع (ج.م/ساعة)', prefixIcon: Icon(Icons.money),
                   ),
-                  validator: (v) => v == null || v.trim().isEmpty
-                      ? 'السعر مطلوب'
-                      : null,
+                  validator: (v) => v == null || v.trim().isEmpty ? 'السعر مطلوب' : null,
                 ),
                 const SizedBox(height: 12),
                 const Align(
                   alignment: Alignment.centerRight,
-                  child: Text(
-                    'الخدمات التي تقدمها',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                  child: Text('الخدمات التي تقدمها', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
                 Wrap(
                   spacing: 8,
                   children: _allServices.map((service) {
                     final isSelected = _selectedServices.contains(service);
                     return FilterChip(
-                      label: Text(service),
-                      selected: isSelected,
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _selectedServices.add(service);
-                          } else {
-                            _selectedServices.remove(service);
-                          }
-                        });
-                      },
+                      label: Text(service), selected: isSelected,
+                      onSelected: (selected) => setState(() {
+                        if (selected) {
+                          _selectedServices.add(service);
+                        } else {
+                          _selectedServices.remove(service);
+                        }
+                      }),
                     );
                   }).toList(),
                 ),
                 const SizedBox(height: 12),
                 const Align(
                   alignment: Alignment.centerRight,
-                  child: Text(
-                    'مناطق العمل',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                  child: Text('مناطق العمل', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
                 Wrap(
                   spacing: 8,
                   children: _areas.map((area) {
                     final isSelected = _selectedWorkAreas.contains(area);
                     return FilterChip(
-                      label: Text(area),
-                      selected: isSelected,
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _selectedWorkAreas.add(area);
-                          } else {
-                            _selectedWorkAreas.remove(area);
-                          }
-                        });
-                      },
+                      label: Text(area), selected: isSelected,
+                      onSelected: (selected) => setState(() {
+                        if (selected) {
+                          _selectedWorkAreas.add(area);
+                        } else {
+                          _selectedWorkAreas.remove(area);
+                        }
+                      }),
                     );
                   }).toList(),
                 ),
                 const SizedBox(height: 16),
                 if (_errorMessage != null)
-                  Text(
-                    _errorMessage!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.error),
-                  ),
+                  Text(_errorMessage!, textAlign: TextAlign.center,
+                      style: const TextStyle(color: AppColors.error)),
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
@@ -375,12 +295,8 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
                     onPressed: _isLoading ? null : _submit,
                     child: _isLoading
                         ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
+                            width: 20, height: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                           )
                         : const Text('إتمام التسجيل'),
                   ),
@@ -414,8 +330,7 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
           onPressed: _isPickingImage ? null : _pickProfileImage,
           icon: _isPickingImage
               ? const SizedBox(
-                  width: 16,
-                  height: 16,
+                  width: 16, height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.photo_library_outlined),
