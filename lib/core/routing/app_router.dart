@@ -31,6 +31,7 @@ import '../../features/nurse/presentation/verification_status.dart';
 import '../../features/nurse/presentation/available_requests.dart';
 import '../../features/nurse/presentation/request_details_nurse.dart';
 import '../../features/nurse/presentation/current_shift.dart';
+import '../../features/nurse/presentation/nurse_bookings.dart';
 import '../../features/nurse/presentation/earnings.dart';
 import '../../features/nurse/presentation/nurse_reviews.dart';
 import '../../features/nurse/presentation/nurse_pro.dart';
@@ -90,6 +91,7 @@ final GoRouter appRouter = GoRouter(
         GoRoute(path: '/nurse/available-requests', builder: (_, __) => const AvailableRequestsScreen()),
         GoRoute(path: '/nurse/request-details/:id', builder: (_, s) => RequestDetailsNurseScreen(requestId: s.pathParameters['id']!)),
         GoRoute(path: '/nurse/current-shift', builder: (_, __) => const CurrentShiftScreen()),
+        GoRoute(path: '/nurse/bookings', builder: (_, __) => const NurseBookingsScreen()),
         GoRoute(path: '/nurse/earnings', builder: (_, __) => const EarningsScreen()),
         GoRoute(path: '/nurse/reviews', builder: (_, __) => const NurseReviewsScreen()),
         GoRoute(path: '/nurse/nurse-pro', builder: (_, __) => const NurseProScreen()),
@@ -108,17 +110,13 @@ Future<String?> _redirectLogic(BuildContext context, GoRouterState state) async 
 
   if (user == null) {
     final onboardingCompleted = prefs.isOnboardingCompleted();
-    if (!onboardingCompleted && currentPath != '/onboarding' && currentPath != '/splash') {
-      return '/onboarding';
-    }
+    if (!onboardingCompleted && currentPath != '/onboarding' && currentPath != '/splash') return '/onboarding';
     const publicPaths = {'/login', '/register', '/role', '/splash', '/onboarding'};
     return publicPaths.contains(currentPath) ? null : '/login';
   }
 
   final appUser = await UserService().getUser(user.uid);
-  if (appUser == null) {
-    return (currentPath == '/role' || currentPath == '/register') ? null : '/role';
-  }
+  if (appUser == null) return (currentPath == '/role' || currentPath == '/register') ? null : '/role';
 
   final role = appUser.role;
   const authPaths = {'/login', '/register', '/role', '/splash', '/onboarding'};
@@ -127,12 +125,8 @@ Future<String?> _redirectLogic(BuildContext context, GoRouterState state) async 
     if (role == 'nurse') return '/nurse/home';
   }
 
-  if (role == 'client') {
-    return currentPath.startsWith('/nurse') ? '/client/home' : null;
-  }
-  if (role == 'nurse') {
-    return currentPath.startsWith('/client') ? '/nurse/home' : null;
-  }
+  if (role == 'client') return currentPath.startsWith('/nurse') ? '/client/home' : null;
+  if (role == 'nurse') return currentPath.startsWith('/client') ? '/nurse/home' : null;
 
   await auth.logout();
   return '/login';
