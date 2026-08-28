@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Handles public nurse profile photos only.
@@ -9,7 +11,7 @@ class SupabaseStorageService {
 
   Future<String> uploadNurseProfilePhoto({
     required String uid,
-    required List<int> bytes,
+    required Uint8List bytes,
     String contentType = 'image/jpeg',
   }) async {
     final path = 'profile/$uid.jpg';
@@ -28,6 +30,8 @@ class SupabaseStorageService {
   }
 
   Future<void> deleteNurseProfilePhoto(String uid) async {
-    await _client.storage.from(bucket).remove(['profile/$uid.jpg']);
+    await _client.storage.from(bucket).remove([
+      'profile/$uid.jpg',
+    ]);
   }
 }
