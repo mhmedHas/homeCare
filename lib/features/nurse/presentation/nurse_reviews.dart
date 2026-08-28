@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../services/review_service.dart';
 import '../../shared/models/review.dart';
 
 class NurseReviewsScreen extends StatefulWidget {
@@ -12,12 +12,10 @@ class NurseReviewsScreen extends StatefulWidget {
 }
 
 class _NurseReviewsScreenState extends State<NurseReviewsScreen> {
+  final _service = ReviewService();
   List<Review> _reviews = [];
-  bool _isLoading = true;
-  String? _errorMessage;
-  double _averageRating = 0;
-  int _totalReviews = 0;
-  Map<int, int> _ratingDistribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0};
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -26,179 +24,89 @@ class _NurseReviewsScreenState extends State<NurseReviewsScreen> {
   }
 
   Future<void> _loadReviews() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (mounted) setState(() { _loading = true; _error = null; });
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        setState(() {
-          _errorMessage = 'يرجى تسجيل الدخول';
-        });
-        return;
-      }
-
-      final snapshot = await FirebaseFirestore.instance
-          .collection('reviews')
-          .where('nurseId', isEqualTo: user.uid)
-          .orderBy('createdAt', descending: true)
-          .get();
-
-      final reviews =
-          snapshot.docs.map((doc) => Review.fromFirestore(doc)).toList();
-
-      setState(() {
-        _reviews = reviews;
-        _totalReviews = reviews.length;
-        if (_totalReviews > 0) {
-          _averageRating =
-              reviews.fold(0, (sum, r) => sum + r.rating) / _totalReviews;
-        }
-
-        // Distribution
-        for (var r in reviews) {
-          _ratingDistribution[r.rating] =
-              (_ratingDistribution[r.rating] ?? 0) + 1;
-        }
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'حدث خطأ';
-      });
+      if (user == null) throw StateError('auth');
+      final reviews = await _service.getNurseReviews(user.uid, limit: 100);
+      if (!mounted) return;
+      setState(() => _reviews = reviews);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'تعذر تحميل التقييمات. حاول مرة أخرى.');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _loading = false);
     }
+  }
+
+  double get _average {
+    if (_reviews.isEmpty) return 0;
+    return _reviews.fold<int>(0, (sum, r) => sum + r.rating) / _reviews.length;
+  }
+
+  Map<int, int> get _distribution {
+    final result = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0};
+    for (final review in _reviews) {
+      if (result.containsKey(review.rating)) result[review.rating] = result[review.rating]! + 1;
+    }
+    return result;
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_error != null) {
+      return Scaffold(appBar: AppBar(title: const Text('تقييماتي')), body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(_error!, style: const TextStyle(color: AppColors.error)),
+        const SizedBox(height: 14),
+        FilledButton.icon(onPressed: _loadReviews, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة')),
+      ])));
+    }
+
+    final distribution = _distribution;
     return Scaffold(
-      appBar: AppBar(title: const Text('تقييماتي')),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-              ? Center(
-                  child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                      Text(_errorMessage!,
-                          style: const TextStyle(color: AppColors.error)),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                          onPressed: _loadReviews,
-                          child: const Text('إعادة المحاولة')),
-                    ]))
-              : Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      // Overall Rating
-                      Row(
-                        children: [
-                          const Icon(Icons.star, size: 40, color: Colors.amber),
-                          const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _averageRating.toStringAsFixed(1),
-                                style: const TextStyle(
-                                    fontSize: 28, fontWeight: FontWeight.bold),
-                              ),
-                              Text('$_totalReviews تقييم',
-                                  style: const TextStyle(
-                                      color: AppColors.textSecondary)),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Rating Distribution
-                      ...List.generate(5, (index) {
-                        final star = 5 - index;
-                        final count = _ratingDistribution[star] ?? 0;
-                        final percentage = _totalReviews > 0
-                            ? (count / _totalReviews * 100)
-                            : 0;
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Row(
-                            children: [
-                              SizedBox(width: 40, child: Text('$star ⭐')),
-                              Expanded(
-                                child: LinearProgressIndicator(
-                                  value: percentage / 100,
-                                  backgroundColor: Colors.grey.shade200,
-                                  color: Colors.amber,
-                                  minHeight: 8,
-                                ),
-                              ),
-                              SizedBox(width: 40, child: Text('$count')),
-                            ],
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 16),
-                      const Divider(),
-                      const Text('التقييمات',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      Expanded(
-                        child: _reviews.isEmpty
-                            ? const Center(child: Text('لا توجد تقييمات بعد'))
-                            : ListView.builder(
-                                itemCount: _reviews.length,
-                                itemBuilder: (context, index) {
-                                  final review = _reviews[index];
-                                  return Card(
-                                    margin:
-                                        const EdgeInsets.symmetric(vertical: 4),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(12.0),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              ...List.generate(
-                                                  5,
-                                                  (i) => Icon(
-                                                        i < review.rating
-                                                            ? Icons.star
-                                                            : Icons.star_border,
-                                                        color: Colors.amber,
-                                                        size: 16,
-                                                      )),
-                                              const Spacer(),
-                                              Text(
-                                                review.createdAt.year
-                                                    .toString(),
-                                                style: const TextStyle(
-                                                    color:
-                                                        AppColors.textSecondary,
-                                                    fontSize: 12),
-                                              ),
-                                            ],
-                                          ),
-                                          if (review.comment != null) ...[
-                                            const SizedBox(height: 4),
-                                            Text(review.comment!),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                      ),
-                    ],
-                  ),
-                ),
+      appBar: AppBar(title: const Text('تقييماتي'), automaticallyImplyLeading: false, actions: [IconButton(onPressed: _loadReviews, icon: const Icon(Icons.refresh))]),
+      body: RefreshIndicator(
+        onRefresh: _loadReviews,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          children: [
+            Card(child: Padding(padding: const EdgeInsets.all(18), child: Row(children: [
+              const Icon(Icons.star, size: 44, color: Colors.amber),
+              const SizedBox(width: 12),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(_average.toStringAsFixed(1), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
+                Text('${_reviews.length} تقييم', style: const TextStyle(color: AppColors.textSecondary)),
+              ]),
+            ]))),
+            const SizedBox(height: 12),
+            Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: List.generate(5, (index) {
+              final star = 5 - index;
+              final count = distribution[star] ?? 0;
+              final value = _reviews.isEmpty ? 0.0 : count / _reviews.length;
+              return Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Row(children: [
+                SizedBox(width: 42, child: Text('$star ⭐')),
+                Expanded(child: LinearProgressIndicator(value: value, minHeight: 8, backgroundColor: Colors.grey.shade200, color: Colors.amber)),
+                SizedBox(width: 35, child: Text('$count', textAlign: TextAlign.end)),
+              ]));
+            }))),),
+            const SizedBox(height: 18),
+            const Text('آراء العملاء', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            if (_reviews.isEmpty)
+              const Padding(padding: EdgeInsets.only(top: 60), child: Center(child: Text('لسه مفيش تقييمات')))
+            else
+              ..._reviews.map((review) => Card(margin: const EdgeInsets.only(bottom: 10), child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  ...List.generate(5, (i) => Icon(i < review.rating ? Icons.star : Icons.star_border, color: Colors.amber, size: 18)),
+                  const Spacer(),
+                  Text('${review.createdAt.day}/${review.createdAt.month}/${review.createdAt.year}', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                ]),
+                if (review.comment?.trim().isNotEmpty == true) ...[const SizedBox(height: 8), Text(review.comment!)],
+              ])))),
+          ],
+        ),
+      ),
     );
   }
 }
