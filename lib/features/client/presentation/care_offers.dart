@@ -78,15 +78,20 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
       final offerRef = db.collection('careOffers').doc(offer.id);
       final bookingRef = db.collection('bookings').doc();
 
+      // Firestore transactions can only read DocumentReference values with tx.get().
+      // QuerySnapshot queries (which expose .docs) are not supported inside a transaction.
+      // Read the pending offers before the transaction, then reject them with a batch
+      // after the transaction has atomically accepted the selected offer.
+      final pendingOffersSnap = await db
+          .collection('careOffers')
+          .where('requestId', isEqualTo: request.id)
+          .where('status', isEqualTo: 'pending')
+          .limit(50)
+          .get();
+
       await db.runTransaction((tx) async {
         final reqSnap = await tx.get(requestRef);
         final selectedOfferSnap = await tx.get(offerRef);
-        final allOffersSnap = await tx.get(
-          db.collection('careOffers')
-              .where('requestId', isEqualTo: request.id)
-              .where('status', isEqualTo: 'pending')
-              .limit(50),
-        );
 
         if (!reqSnap.exists || reqSnap.data()?['clientId'] != uid) throw Exception('not allowed');
         if (reqSnap.data()?['status'] != 'open') throw Exception('closed');
@@ -105,7 +110,9 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
         final hour = int.tryParse(timeParts.first) ?? 8;
         final minute = int.tryParse(timeParts.length > 1 ? timeParts[1] : '0') ?? 0;
 
-        if (nurseId.isEmpty || selectedPrice <= 0 || !CareRequest.allowedShiftHours.contains(hours)) throw Exception('invalid offer');
+        if (nurseId.isEmpty || selectedPrice <= 0 || !CareRequest.allowedShiftHours.contains(hours)) {
+          throw Exception('invalid offer');
+        }
 
         final safeHour = hour.clamp(0, 23).toInt();
         final safeMinute = minute.clamp(0, 59).toInt();
@@ -119,12 +126,10 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
           'selectedOfferId': offer.id,
           'updatedAt': FieldValue.serverTimestamp(),
         });
-        tx.update(offerRef, {'status': 'accepted', 'updatedAt': FieldValue.serverTimestamp()});
-
-        for (final other in allOffersSnap.docs) {
-          if (other.id == offer.id) continue;
-          tx.update(other.reference, {'status': 'rejected', 'updatedAt': FieldValue.serverTimestamp()});
-        }
+        tx.update(offerRef, {
+          'status': 'accepted',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
 
         tx.set(bookingRef, {
           'clientId': uid,
@@ -146,10 +151,25 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
         });
       });
 
+      // Reject the other offers only after the transaction succeeds.
+      final batch = db.batch();
+      var rejectedCount = 0;
+      for (final other in pendingOffersSnap.docs) {
+        if (other.id == offer.id || rejectedCount >= 49) continue;
+        batch.update(other.reference, {
+          'status': 'rejected',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        rejectedCount++;
+      }
+      if (rejectedCount > 0) await batch.commit();
+
       if (mounted) context.go('/client/payment/${bookingRef.id}');
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('العرض لم يعد متاحًا. حدّث الصفحة وحاول مرة أخرى.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('العرض لم يعد متاحًا. حدّث الصفحة وحاول مرة أخرى.')),
+        );
         await _load();
       }
     } finally {
@@ -160,16 +180,23 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (_request == null) return Scaffold(
-      appBar: AppBar(title: const Text('عروض الممرضين')),
-      body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.error_outline, size: 56),
-        const SizedBox(height: 12),
-        const Text('تعذر تحميل الطلب. تأكد من اتصالك بالإنترنت.'),
-        const SizedBox(height: 12),
-        FilledButton(onPressed: _load, child: const Text('إعادة المحاولة')),
-      ])),
-    );
+    if (_request == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('عروض الممرضين')),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, size: 56),
+              const SizedBox(height: 12),
+              const Text('تعذر تحميل الطلب. تأكد من اتصالك بالإنترنت.'),
+              const SizedBox(height: 12),
+              FilledButton(onPressed: _load, child: const Text('إعادة المحاولة')),
+            ],
+          ),
+        ),
+      );
+    }
 
     final closed = _request!.status != 'open';
     return Scaffold(
@@ -187,96 +214,161 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
               color: closed ? AppColors.primaryLight : null,
               child: Padding(
                 padding: const EdgeInsets.all(14),
-                child: Row(children: [
-                  Icon(closed ? Icons.check_circle_outline : Icons.people_alt_outlined, color: AppColors.primary),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(closed ? 'تم اختيار الممرض لهذا الطلب.' : 'راجع العروض والتقييمات ثم اختر الممرض المناسب.')),
-                ]),
+                child: Row(
+                  children: [
+                    Icon(
+                      closed ? Icons.check_circle_outline : Icons.people_alt_outlined,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        closed
+                            ? 'تم اختيار الممرض لهذا الطلب.'
+                            : 'راجع العروض والتقييمات ثم اختر الممرض المناسب.',
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 10),
             if (_offers.isEmpty)
               const Padding(
                 padding: EdgeInsets.only(top: 90),
-                child: Column(children: [
-                  Icon(Icons.inbox_outlined, size: 64),
-                  SizedBox(height: 12),
-                  Text('لسه مفيش عروض على طلبك', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  Text('عندما يقدم ممرض عرضًا سيظهر هنا.'),
-                ]),
+                child: Column(
+                  children: [
+                    Icon(Icons.inbox_outlined, size: 64),
+                    SizedBox(height: 12),
+                    Text(
+                      'لسه مفيش عروض على طلبك',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 8),
+                    Text('عندما يقدم ممرض عرضًا سيظهر هنا.'),
+                  ],
+                ),
               )
-            else ..._offers.map((offer) {
-              final accepted = offer.data()['status'] == 'accepted';
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _card(offer, disabled: closed, accepted: accepted),
-              );
-            }),
+            else
+              ..._offers.map((offer) {
+                final accepted = offer.data()['status'] == 'accepted';
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _card(offer, disabled: closed, accepted: accepted),
+                );
+              }),
           ],
         ),
       ),
     );
   }
 
-  Widget _card(QueryDocumentSnapshot<Map<String, dynamic>> offer, {required bool disabled, required bool accepted}) {
+  Widget _card(
+    QueryDocumentSnapshot<Map<String, dynamic>> offer, {
+    required bool disabled,
+    required bool accepted,
+  }) {
     final d = offer.data();
     final rating = (d['nurseRating'] as num?)?.toDouble() ?? 0;
     final price = (d['proposedPrice'] as num?)?.toDouble() ?? 0;
     final exp = d['nurseExperienceYears'] ?? 0;
     final photo = d['nursePhotoUrl']?.toString();
+
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (accepted) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(color: AppColors.success.withValues(alpha: .10), borderRadius: BorderRadius.circular(10)),
-              child: const Text('✓ الممرض المختار', style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold)),
-            ),
-            const SizedBox(height: 12),
-          ],
-          Row(children: [
-            CircleAvatar(
-              backgroundImage: photo != null && photo.isNotEmpty ? NetworkImage(photo) : null,
-              child: photo == null || photo.isEmpty ? const Icon(Icons.person) : null,
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(d['nurseName']?.toString() ?? 'ممرض', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-              const SizedBox(height: 4),
-              Row(children: [
-                if (d['nurseVerified'] == true) const Icon(Icons.verified, size: 16, color: AppColors.success),
-                if (d['nurseVerified'] == true) const SizedBox(width: 4),
-                Text(rating > 0 ? '${rating.toStringAsFixed(1)} ⭐' : 'بدون تقييم'),
-                const SizedBox(width: 10),
-                Text('$exp سنوات خبرة'),
-              ]),
-            ])),
-            Text('${price.toStringAsFixed(0)} ج.م', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary)),
-          ]),
-          const SizedBox(height: 4),
-          const Text('سعر الشيفت الواحد', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          if ((d['note'] ?? '').toString().trim().isNotEmpty)
-            Padding(padding: const EdgeInsets.only(top: 12), child: Text(d['note'].toString())),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: OutlinedButton(
-              onPressed: () => context.push('/client/nurse-profile/${d['nurseId']}?requestId=${widget.requestId}'),
-              child: const Text('عرض الملف والتقييمات'),
-            )),
-            if (!accepted) ...[
-              const SizedBox(width: 10),
-              Expanded(child: FilledButton(
-                onPressed: disabled || _accepting ? null : () => _accept(offer),
-                child: Text(_accepting ? 'جاري الاختيار...' : 'اختيار الممرض'),
-              )),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (accepted) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: .10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Text(
+                  '✓ الممرض المختار',
+                  style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(height: 12),
             ],
-          ]),
-        ]),
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundImage: photo != null && photo.isNotEmpty ? NetworkImage(photo) : null,
+                  child: photo == null || photo.isEmpty ? const Icon(Icons.person) : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        d['nurseName']?.toString() ?? 'ممرض',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          if (d['nurseVerified'] == true)
+                            const Icon(Icons.verified, size: 16, color: AppColors.success),
+                          if (d['nurseVerified'] == true) const SizedBox(width: 4),
+                          Text(rating > 0 ? '${rating.toStringAsFixed(1)} ⭐' : 'بدون تقييم'),
+                          const SizedBox(width: 10),
+                          Text('$exp سنوات خبرة'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '${price.toStringAsFixed(0)} ج.م',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'سعر الشيفت الواحد',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+            if ((d['note'] ?? '').toString().trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(d['note'].toString()),
+              ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => context.push(
+                      '/client/nurse-profile/${d['nurseId']}?requestId=${widget.requestId}',
+                    ),
+                    child: const Text('عرض الملف والتقييمات'),
+                  ),
+                ),
+                if (!accepted) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: disabled || _accepting ? null : () => _accept(offer),
+                      child: Text(_accepting ? 'جاري الاختيار...' : 'اختيار الممرض'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
