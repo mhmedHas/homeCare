@@ -37,21 +37,29 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
       final offersSnap = await db
           .collection('careOffers')
           .where('requestId', isEqualTo: widget.requestId)
-          .where('status', isEqualTo: 'pending')
           .limit(50)
           .get();
-      final offers = [...offersSnap.docs];
+
+      final offers = offersSnap.docs.where((doc) {
+        final status = doc.data()['status']?.toString() ?? '';
+        return status == 'pending' || status == 'accepted';
+      }).toList();
       offers.sort((a, b) {
+        final aAccepted = a.data()['status'] == 'accepted';
+        final bAccepted = b.data()['status'] == 'accepted';
+        if (aAccepted != bAccepted) return aAccepted ? -1 : 1;
         final aPrice = (a.data()['proposedPrice'] as num?)?.toDouble() ?? double.infinity;
         final bPrice = (b.data()['proposedPrice'] as num?)?.toDouble() ?? double.infinity;
         return aPrice.compareTo(bPrice);
       });
 
-      if (mounted) setState(() {
-        _request = CareRequest.fromFirestore(requestSnap);
-        _offers = offers;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _request = CareRequest.fromFirestore(requestSnap);
+          _offers = offers;
+          _loading = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() { _request = null; _offers = []; _loading = false; });
     }
@@ -157,7 +165,7 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
       body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         const Icon(Icons.error_outline, size: 56),
         const SizedBox(height: 12),
-        const Text('تعذر تحميل الطلب أو لم يعد متاحًا.'),
+        const Text('تعذر تحميل الطلب. تأكد من اتصالك بالإنترنت.'),
         const SizedBox(height: 12),
         FilledButton(onPressed: _load, child: const Text('إعادة المحاولة')),
       ])),
@@ -165,38 +173,53 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
 
     final closed = _request!.status != 'open';
     return Scaffold(
-      appBar: AppBar(title: const Text('عروض الممرضين'), actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))]),
+      appBar: AppBar(
+        title: const Text('الممرضون والعروض'),
+        actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))],
+      ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
-            if (closed) Card(
-              color: AppColors.primaryLight,
-              child: const Padding(padding: EdgeInsets.all(14), child: Row(children: [
-                Icon(Icons.check_circle_outline, color: AppColors.primary),
-                SizedBox(width: 10),
-                Expanded(child: Text('تم اختيار مقدم الرعاية لهذا الطلب.')),
-              ])),
+            Card(
+              color: closed ? AppColors.primaryLight : null,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(children: [
+                  Icon(closed ? Icons.check_circle_outline : Icons.people_alt_outlined, color: AppColors.primary),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(closed ? 'تم اختيار الممرض لهذا الطلب.' : 'راجع العروض والتقييمات ثم اختر الممرض المناسب.')),
+                ]),
+              ),
             ),
+            const SizedBox(height: 10),
             if (_offers.isEmpty)
-              const Padding(padding: EdgeInsets.only(top: 110), child: Column(children: [
-                Icon(Icons.inbox_outlined, size: 64),
-                SizedBox(height: 12),
-                Text('لسه مفيش عروض على طلبك', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                SizedBox(height: 8),
-                Text('عندما يقدم ممرض عرضًا سيظهر هنا.'),
-              ]))
-            else
-              ..._offers.map((offer) => Padding(padding: const EdgeInsets.only(bottom: 10), child: _card(offer, disabled: closed))),
+              const Padding(
+                padding: EdgeInsets.only(top: 90),
+                child: Column(children: [
+                  Icon(Icons.inbox_outlined, size: 64),
+                  SizedBox(height: 12),
+                  Text('لسه مفيش عروض على طلبك', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 8),
+                  Text('عندما يقدم ممرض عرضًا سيظهر هنا.'),
+                ]),
+              )
+            else ..._offers.map((offer) {
+              final accepted = offer.data()['status'] == 'accepted';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _card(offer, disabled: closed, accepted: accepted),
+              );
+            }),
           ],
         ),
       ),
     );
   }
 
-  Widget _card(QueryDocumentSnapshot<Map<String, dynamic>> offer, {required bool disabled}) {
+  Widget _card(QueryDocumentSnapshot<Map<String, dynamic>> offer, {required bool disabled, required bool accepted}) {
     final d = offer.data();
     final rating = (d['nurseRating'] as num?)?.toDouble() ?? 0;
     final price = (d['proposedPrice'] as num?)?.toDouble() ?? 0;
@@ -204,33 +227,57 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
     final photo = d['nursePhotoUrl']?.toString();
     return Card(
       margin: EdgeInsets.zero,
-      child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          CircleAvatar(backgroundImage: photo != null && photo.isNotEmpty ? NetworkImage(photo) : null, child: photo == null || photo.isEmpty ? const Icon(Icons.person) : null),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(d['nurseName']?.toString() ?? 'ممرض', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-            const SizedBox(height: 4),
-            Row(children: [
-              if (d['nurseVerified'] == true) const Icon(Icons.verified, size: 16, color: AppColors.success),
-              if (d['nurseVerified'] == true) const SizedBox(width: 4),
-              Text(rating > 0 ? '${rating.toStringAsFixed(1)} ⭐' : 'بدون تقييم'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (accepted) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(color: AppColors.success.withValues(alpha: .10), borderRadius: BorderRadius.circular(10)),
+              child: const Text('✓ الممرض المختار', style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 12),
+          ],
+          Row(children: [
+            CircleAvatar(
+              backgroundImage: photo != null && photo.isNotEmpty ? NetworkImage(photo) : null,
+              child: photo == null || photo.isEmpty ? const Icon(Icons.person) : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(d['nurseName']?.toString() ?? 'ممرض', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+              const SizedBox(height: 4),
+              Row(children: [
+                if (d['nurseVerified'] == true) const Icon(Icons.verified, size: 16, color: AppColors.success),
+                if (d['nurseVerified'] == true) const SizedBox(width: 4),
+                Text(rating > 0 ? '${rating.toStringAsFixed(1)} ⭐' : 'بدون تقييم'),
+                const SizedBox(width: 10),
+                Text('$exp سنوات خبرة'),
+              ]),
+            ])),
+            Text('${price.toStringAsFixed(0)} ج.م', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary)),
+          ]),
+          const SizedBox(height: 4),
+          const Text('سعر الشيفت الواحد', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          if ((d['note'] ?? '').toString().trim().isNotEmpty)
+            Padding(padding: const EdgeInsets.only(top: 12), child: Text(d['note'].toString())),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(child: OutlinedButton(
+              onPressed: () => context.push('/client/nurse-profile/${d['nurseId']}?requestId=${widget.requestId}'),
+              child: const Text('عرض الملف والتقييمات'),
+            )),
+            if (!accepted) ...[
               const SizedBox(width: 10),
-              Text('$exp سنوات خبرة'),
-            ]),
-          ])),
-          Text('${price.toStringAsFixed(0)} ج.م', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary)),
+              Expanded(child: FilledButton(
+                onPressed: disabled || _accepting ? null : () => _accept(offer),
+                child: Text(_accepting ? 'جاري الاختيار...' : 'اختيار الممرض'),
+              )),
+            ],
+          ]),
         ]),
-        const SizedBox(height: 4),
-        const Text('سعر الشيفت الواحد', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-        if ((d['note'] ?? '').toString().trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 12), child: Text(d['note'].toString())),
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(child: OutlinedButton(onPressed: () => context.push('/client/nurse-profile/${d['nurseId']}?requestId=${widget.requestId}'), child: const Text('عرض الملف'))),
-          const SizedBox(width: 10),
-          Expanded(child: FilledButton(onPressed: disabled || _accepting ? null : () => _accept(offer), child: Text(_accepting ? 'جاري الاختيار...' : 'اختيار الممرض'))),
-        ]),
-      ])),
+      ),
     );
   }
 }
