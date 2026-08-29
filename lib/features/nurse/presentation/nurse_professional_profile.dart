@@ -1,8 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../services/supabase_service.dart';
 import '../../../services/user_service.dart';
+import '../../shared/models/app_user.dart';
 
 class NurseProfessionalProfileScreen extends StatefulWidget {
   const NurseProfessionalProfileScreen({super.key});
@@ -15,15 +19,18 @@ class NurseProfessionalProfileScreen extends StatefulWidget {
 class _NurseProfessionalProfileScreenState
     extends State<NurseProfessionalProfileScreen> {
   bool _isLoading = true;
-  Map<String, dynamic>? _profileData;
+  bool _isSaving = false;
+  bool _isUploadingPhoto = false;
   String? _errorMessage;
+  String? _photoUrl;
 
+  final _picker = ImagePicker();
   final _formKey = GlobalKey<FormState>();
   final _experienceController = TextEditingController();
   final _priceController = TextEditingController();
+  final _bioController = TextEditingController();
   String? _selectedSpecialization;
   List<String> _selectedServices = [];
-  List<String> _selectedWorkAreas = [];
 
   final List<String> _specializations = [
     'تمريض عام',
@@ -46,21 +53,19 @@ class _NurseProfessionalProfileScreenState
     'تمريض الأطفال',
     'العناية بالتنفس',
   ];
-  final List<String> _areas = [
-    'مدينة نصر',
-    'مصر الجديدة',
-    'الزمالك',
-    'الدقي',
-    'المهندسين',
-    'مصر القديمة',
-    'المعادي',
-    'الهرم'
-  ];
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    _experienceController.dispose();
+    _priceController.dispose();
+    _bioController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadProfile() async {
@@ -71,87 +76,115 @@ class _NurseProfessionalProfileScreenState
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        setState(() {
-          _errorMessage = 'يرجى تسجيل الدخول';
-        });
+        setState(() => _errorMessage = 'يرجى تسجيل الدخول');
         return;
       }
 
-      final doc = await FirebaseFirestore.instance
-          .collection('nurseProfiles')
-          .doc(user.uid)
-          .get();
+      final results = await Future.wait([
+        FirebaseFirestore.instance.collection('nurseProfiles').doc(user.uid).get(),
+        UserService().getUser(user.uid),
+      ]);
+      final doc = results[0] as DocumentSnapshot<Map<String, dynamic>>;
+      final appUser = results[1] as AppUser?;
 
       if (doc.exists) {
-        final data = doc.data()!;
+        final data = doc.data() ?? {};
         setState(() {
-          _profileData = data;
-          _experienceController.text =
-              (data['experienceYears'] ?? 0).toString();
+          _experienceController.text = (data['experienceYears'] ?? 0).toString();
           _priceController.text = (data['expectedPrice'] ?? 0).toString();
+          _bioController.text = (data['bio'] ?? '').toString();
           _selectedSpecialization = data['specialization'] ?? 'تمريض عام';
           _selectedServices = List<String>.from(data['services'] ?? []);
-          _selectedWorkAreas = List<String>.from(data['workAreas'] ?? []);
         });
+      } else {
+        setState(() => _selectedSpecialization = 'تمريض عام');
+      }
+      if (appUser?.photoUrl != null) {
+        setState(() => _photoUrl = appUser!.photoUrl);
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'حدث خطأ';
-      });
+      setState(() => _errorMessage = 'حدث خطأ في تحميل البيانات');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _pickAndUploadPhoto() async {
+    if (_isUploadingPhoto) return;
+    try {
+      final image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85, maxWidth: 1000);
+      if (image == null) return;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      setState(() => _isUploadingPhoto = true);
+      final url = await SupabaseService.uploadImage(
+        file: File(image.path),
+        folder: 'profile_photos',
+        fileName: '$uid.jpg',
+      );
+      await UserService().updateUser(uid, {'photoUrl': url});
+      if (!mounted) return;
+      setState(() => _photoUrl = url);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث الصورة الشخصية')));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر رفع الصورة، تأكد من إعداد Supabase وحاول مرة أخرى')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingPhoto = false);
     }
   }
 
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
-      _isLoading = true;
+      _isSaving = true;
       _errorMessage = null;
     });
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        setState(() {
-          _errorMessage = 'يرجى تسجيل الدخول';
-        });
+        setState(() => _errorMessage = 'يرجى تسجيل الدخول');
         return;
       }
 
+      // Using set(merge: true) instead of update() so this also works the
+      // very first time a nurse opens this screen (before any nurseProfiles
+      // document exists for them).
       await FirebaseFirestore.instance
           .collection('nurseProfiles')
           .doc(user.uid)
-          .update({
+          .set({
+        'uid': user.uid,
         'specialization': _selectedSpecialization,
         'experienceYears': int.tryParse(_experienceController.text.trim()) ?? 0,
         'services': _selectedServices,
-        'workAreas': _selectedWorkAreas,
         'expectedPrice': double.tryParse(_priceController.text.trim()) ?? 0,
+        'bio': _bioController.text.trim(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      }, SetOptions(merge: true));
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('تم حفظ البيانات بنجاح')));
     } catch (e) {
-      setState(() {
-        _errorMessage = 'حدث خطأ في الحفظ';
-      });
+      setState(() => _errorMessage = 'حدث خطأ في الحفظ');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('الملف المهني')),
-      body: _isLoading && _profileData == null
+      body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
+          : _errorMessage != null && _selectedSpecialization == null
               ? Center(
                   child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -170,6 +203,39 @@ class _NurseProfessionalProfileScreenState
                     child: SingleChildScrollView(
                       child: Column(
                         children: [
+                          Center(
+                            child: Stack(
+                              children: [
+                                CircleAvatar(
+                                  radius: 48,
+                                  backgroundColor: AppColors.primaryLight,
+                                  backgroundImage: (_photoUrl?.isNotEmpty ?? false) ? NetworkImage(_photoUrl!) : null,
+                                  child: (_photoUrl?.isNotEmpty ?? false)
+                                      ? null
+                                      : const Icon(Icons.person, size: 44, color: AppColors.primary),
+                                ),
+                                Positioned(
+                                  bottom: 0,
+                                  right: 0,
+                                  child: InkWell(
+                                    onTap: _pickAndUploadPhoto,
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                                      child: _isUploadingPhoto
+                                          ? const SizedBox(
+                                              width: 16, height: 16,
+                                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                          : const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+
                           // Specialization
                           DropdownButtonFormField<String>(
                             value: _selectedSpecialization,
@@ -208,11 +274,32 @@ class _NurseProfessionalProfileScreenState
                           ),
                           const SizedBox(height: 12),
 
+                          // Bio
+                          TextFormField(
+                            controller: _bioController,
+                            minLines: 3,
+                            maxLines: 5,
+                            decoration: const InputDecoration(
+                              labelText: 'نبذة عني (تظهر للعميل)',
+                              alignLabelWithHint: true,
+                              prefixIcon: Padding(
+                                padding: EdgeInsets.only(bottom: 48),
+                                child: Icon(Icons.info_outline),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
                           // Services
-                          const Text('الخدمات',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          const Align(
+                            alignment: Alignment.centerRight,
+                            child: Text('الخدمات',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                          const SizedBox(height: 6),
                           Wrap(
                             spacing: 8,
+                            runSpacing: 8,
                             children: _allServices.map((service) {
                               final isSelected =
                                   _selectedServices.contains(service);
@@ -231,31 +318,6 @@ class _NurseProfessionalProfileScreenState
                               );
                             }).toList(),
                           ),
-                          const SizedBox(height: 12),
-
-                          // Work Areas
-                          const Text('مناطق العمل',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                          Wrap(
-                            spacing: 8,
-                            children: _areas.map((area) {
-                              final isSelected =
-                                  _selectedWorkAreas.contains(area);
-                              return FilterChip(
-                                label: Text(area),
-                                selected: isSelected,
-                                onSelected: (selected) {
-                                  setState(() {
-                                    if (selected) {
-                                      _selectedWorkAreas.add(area);
-                                    } else {
-                                      _selectedWorkAreas.remove(area);
-                                    }
-                                  });
-                                },
-                              );
-                            }).toList(),
-                          ),
                           const SizedBox(height: 16),
 
                           if (_errorMessage != null)
@@ -263,15 +325,19 @@ class _NurseProfessionalProfileScreenState
                                 style: const TextStyle(color: AppColors.error)),
 
                           const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: _isLoading ? null : _saveProfile,
-                            child: _isLoading
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                        color: Colors.white, strokeWidth: 2))
-                                : const Text('حفظ التغييرات'),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton(
+                              onPressed: _isSaving ? null : _saveProfile,
+                              child: _isSaving
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                          color: Colors.white, strokeWidth: 2))
+                                  : const Text('حفظ التغييرات'),
+                            ),
                           ),
                         ],
                       ),

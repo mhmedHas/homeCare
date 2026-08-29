@@ -1,10 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../services/supabase_service.dart';
 
 class NurseDocumentsScreen extends StatefulWidget {
   const NurseDocumentsScreen({super.key});
@@ -68,9 +68,11 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
       if (uid == null) throw StateError('unauthenticated');
 
       setState(() { _isUploading = true; _errorMessage = null; });
-      final ref = FirebaseStorage.instance.ref().child('nurse_documents').child(uid).child('${type.id}.jpg');
-      await ref.putFile(File(image.path), SettableMetadata(contentType: 'image/jpeg'));
-      final url = await ref.getDownloadURL();
+      final url = await SupabaseService.uploadImage(
+        file: File(image.path),
+        folder: 'nurse_documents/$uid',
+        fileName: '${type.id}.jpg',
+      );
 
       final updatedDocuments = Map<String, String>.from(_documents)..[type.id] = url;
       await FirebaseFirestore.instance.collection('nurseDocuments').doc(uid).set({

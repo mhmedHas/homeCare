@@ -9,6 +9,7 @@ class NurseShell extends StatelessWidget {
   int _currentIndex(String path) {
     if (path.startsWith('/nurse/available-requests') || path.startsWith('/nurse/request-details')) return 1;
     if (path.startsWith('/nurse/bookings') || path.startsWith('/nurse/current-shift')) return 2;
+    if (path.startsWith('/nurse/messages') || path.startsWith('/nurse/chat')) return 3;
     if (path.startsWith('/nurse/profile') ||
         path.startsWith('/nurse/settings') ||
         path.startsWith('/nurse/documents') ||
@@ -16,7 +17,7 @@ class NurseShell extends StatelessWidget {
         path.startsWith('/nurse/professional-profile') ||
         path.startsWith('/nurse/nurse-pro') ||
         path.startsWith('/nurse/reviews') ||
-        path.startsWith('/nurse/earnings')) return 3;
+        path.startsWith('/nurse/earnings')) return 4;
     return 0;
   }
 
@@ -25,6 +26,7 @@ class NurseShell extends StatelessWidget {
       '/nurse/home',
       '/nurse/available-requests',
       '/nurse/bookings',
+      '/nurse/messages',
       '/nurse/profile',
     ];
     context.go(routes[index]);
@@ -44,6 +46,7 @@ class NurseShell extends StatelessWidget {
           NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'الرئيسية'),
           NavigationDestination(icon: Icon(Icons.assignment_outlined), selectedIcon: Icon(Icons.assignment), label: 'الطلبات'),
           NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'حجوزاتي'),
+          NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: 'الرسائل'),
           NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'حسابي'),
         ],
       ),
