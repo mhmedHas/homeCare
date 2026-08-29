@@ -3,7 +3,9 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/booking_service.dart';
+import '../../../services/user_service.dart';
 import '../../shared/models/booking.dart';
+import '../../shared/models/app_user.dart';
 
 class NurseBookingsScreen extends StatefulWidget {
   const NurseBookingsScreen({super.key});
@@ -16,6 +18,7 @@ class _NurseBookingsScreenState extends State<NurseBookingsScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
   List<Booking> _bookings = [];
+  Map<String, AppUser> _clients = {};
   bool _loading = true;
   String? _error;
 
@@ -38,8 +41,12 @@ class _NurseBookingsScreenState extends State<NurseBookingsScreen>
       final user = AuthService().currentUser;
       if (user == null) throw StateError('auth');
       final data = await BookingService().getNurseBookings(user.uid);
+      final clients = await UserService().getUsersByIds(data.map((b) => b.clientId));
       if (!mounted) return;
-      setState(() => _bookings = data);
+      setState(() {
+        _bookings = data;
+        _clients = clients;
+      });
     } catch (_) {
       if (mounted) setState(() => _error = 'تعذر تحميل الحجوزات. حاول مرة أخرى.');
     } finally {
@@ -75,7 +82,7 @@ class _NurseBookingsScreenState extends State<NurseBookingsScreen>
               ? _ErrorView(message: _error!, onRetry: _load)
               : TabBarView(
                   controller: _tabs,
-                  children: List.generate(4, (i) => _BookingList(bookings: _forTab(i))),
+                  children: List.generate(4, (i) => _BookingList(bookings: _forTab(i), clients: _clients)),
                 ),
     );
   }
@@ -83,7 +90,8 @@ class _NurseBookingsScreenState extends State<NurseBookingsScreen>
 
 class _BookingList extends StatelessWidget {
   final List<Booking> bookings;
-  const _BookingList({required this.bookings});
+  final Map<String, AppUser> clients;
+  const _BookingList({required this.bookings, required this.clients});
 
   @override
   Widget build(BuildContext context) {
@@ -108,19 +116,25 @@ class _BookingList extends StatelessWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, index) {
         final b = bookings[index];
-        final id = b.id.length > 6 ? b.id.substring(0, 6) : b.id;
+        final client = clients[b.clientId];
+        final clientName = client?.name.trim().isNotEmpty == true ? client!.name.trim() : 'عميل';
         return Card(
           margin: EdgeInsets.zero,
           child: ListTile(
             contentPadding: const EdgeInsets.all(14),
-            leading: const CircleAvatar(child: Icon(Icons.medical_services_outlined)),
-            title: Text('حجز #$id', style: const TextStyle(fontWeight: FontWeight.w700)),
+            leading: CircleAvatar(
+              backgroundColor: AppColors.primaryLight,
+              backgroundImage: (client?.photoUrl?.isNotEmpty ?? false) ? NetworkImage(client!.photoUrl!) : null,
+              child: (client?.photoUrl?.isNotEmpty ?? false) ? null : Icon(Icons.person_outline, color: AppColors.primary),
+            ),
+            title: Text(clientName, style: const TextStyle(fontWeight: FontWeight.w700)),
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text('${_date(b.shiftStart)}\n${b.totalAmount.toStringAsFixed(0)} ج.م'),
             ),
+            isThreeLine: true,
             trailing: _Status(status: b.status),
-            onTap: () => context.push('/nurse/current-shift'),
+            onTap: () => context.push('/nurse/current-shift?bookingId=${b.id}'),
           ),
         );
       },

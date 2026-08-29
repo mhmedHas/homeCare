@@ -16,7 +16,7 @@ import '../../features/client/presentation/booking_confirmation.dart';
 import '../../features/client/presentation/booking_details.dart';
 import '../../features/client/presentation/my_bookings.dart';
 import '../../features/client/presentation/my_requests.dart';
-import '../../features/client/presentation/chat.dart';
+import '../../features/shared/presentation/chat_screen.dart';
 import '../../features/client/presentation/messages.dart';
 import '../../features/client/presentation/rating.dart';
 import '../../features/client/presentation/client_profile.dart';
@@ -31,7 +31,9 @@ import '../../features/nurse/presentation/verification_status.dart';
 import '../../features/nurse/presentation/available_requests.dart';
 import '../../features/nurse/presentation/request_details_nurse.dart';
 import '../../features/nurse/presentation/current_shift.dart';
+import '../../features/nurse/presentation/previous_shifts.dart';
 import '../../features/nurse/presentation/nurse_bookings.dart';
+import '../../features/nurse/presentation/nurse_messages.dart';
 import '../../features/nurse/presentation/earnings.dart';
 import '../../features/nurse/presentation/nurse_reviews.dart';
 import '../../features/nurse/presentation/nurse_pro.dart';
@@ -90,8 +92,11 @@ final GoRouter appRouter = GoRouter(
         GoRoute(path: '/nurse/verification-status', builder: (_, __) => const VerificationStatusScreen()),
         GoRoute(path: '/nurse/available-requests', builder: (_, __) => const AvailableRequestsScreen()),
         GoRoute(path: '/nurse/request-details/:id', builder: (_, s) => RequestDetailsNurseScreen(requestId: s.pathParameters['id']!)),
-        GoRoute(path: '/nurse/current-shift', builder: (_, __) => const CurrentShiftScreen()),
+        GoRoute(path: '/nurse/current-shift', builder: (_, s) => CurrentShiftScreen(bookingId: s.uri.queryParameters['bookingId'])),
         GoRoute(path: '/nurse/bookings', builder: (_, __) => const NurseBookingsScreen()),
+        GoRoute(path: '/nurse/previous-shifts', builder: (_, __) => const PreviousShiftsScreen()),
+        GoRoute(path: '/nurse/messages', builder: (_, __) => const NurseMessagesScreen()),
+        GoRoute(path: '/nurse/chat/:id', builder: (_, s) => ChatScreen(bookingId: s.pathParameters['id']!)),
         GoRoute(path: '/nurse/earnings', builder: (_, __) => const EarningsScreen()),
         GoRoute(path: '/nurse/reviews', builder: (_, __) => const NurseReviewsScreen()),
         GoRoute(path: '/nurse/nurse-pro', builder: (_, __) => const NurseProScreen()),

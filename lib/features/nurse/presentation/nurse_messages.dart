@@ -6,18 +6,20 @@ import '../../../services/auth_service.dart';
 import '../../../services/user_service.dart';
 import '../../shared/models/app_user.dart';
 
-class ClientMessagesScreen extends StatefulWidget {
-  const ClientMessagesScreen({super.key});
+/// Nurse-side conversation list. Mirrors [ClientMessagesScreen] but keyed by
+/// nurseId and shows the client's real name/photo instead of a booking id.
+class NurseMessagesScreen extends StatefulWidget {
+  const NurseMessagesScreen({super.key});
 
   @override
-  State<ClientMessagesScreen> createState() => _ClientMessagesScreenState();
+  State<NurseMessagesScreen> createState() => _NurseMessagesScreenState();
 }
 
-class _ClientMessagesScreenState extends State<ClientMessagesScreen> {
+class _NurseMessagesScreenState extends State<NurseMessagesScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _chats = [];
-  Map<String, AppUser> _nurses = {};
+  Map<String, AppUser> _clients = {};
 
   @override
   void initState() {
@@ -40,11 +42,9 @@ class _ClientMessagesScreenState extends State<ClientMessagesScreen> {
         return;
       }
 
-      // One bounded query only. We intentionally avoid an always-on listener
-      // for the inbox to keep Firestore usage low on the Spark plan.
       final snapshot = await FirebaseFirestore.instance
           .collection('chats')
-          .where('clientId', isEqualTo: user.uid)
+          .where('nurseId', isEqualTo: user.uid)
           .limit(30)
           .get();
 
@@ -58,22 +58,19 @@ class _ClientMessagesScreenState extends State<ClientMessagesScreen> {
           return 0;
         });
 
-      // Resolve the nurse's name/photo for every conversation in one batch.
-      final nurseIds = chats
-          .map((d) => d.data()['nurseId']?.toString() ?? '')
+      final clientIds = chats
+          .map((d) => d.data()['clientId']?.toString() ?? '')
           .where((id) => id.isNotEmpty);
-      final nurses = await UserService().getUsersByIds(nurseIds);
+      final clients = await UserService().getUsersByIds(clientIds);
 
       if (mounted) {
         setState(() {
           _chats = chats;
-          _nurses = nurses;
+          _clients = clients;
         });
       }
     } catch (_) {
-      if (mounted) {
-        setState(() => _errorMessage = 'تعذر تحميل الرسائل');
-      }
+      if (mounted) setState(() => _errorMessage = 'تعذر تحميل الرسائل');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -141,7 +138,7 @@ class _ClientMessagesScreenState extends State<ClientMessagesScreen> {
             ),
             SizedBox(height: 8),
             Center(
-              child: Text('بعد إنشاء حجز، هتقدر تتواصل مع مقدم الرعاية.'),
+              child: Text('بعد تأكيد حجز، هتقدر تتواصل مع العميل من هنا.'),
             ),
           ],
         ),
@@ -158,10 +155,10 @@ class _ClientMessagesScreenState extends State<ClientMessagesScreen> {
         itemBuilder: (context, index) {
           final data = _chats[index].data();
           final bookingId = data['bookingId'] as String?;
-          final nurseId = data['nurseId']?.toString();
-          final nurse = nurseId != null ? _nurses[nurseId] : null;
-          final displayName = nurse?.name.trim().isNotEmpty == true
-              ? nurse!.name.trim()
+          final clientId = data['clientId']?.toString();
+          final client = clientId != null ? _clients[clientId] : null;
+          final displayName = client?.name.trim().isNotEmpty == true
+              ? client!.name.trim()
               : 'محادثة';
           final lastMessage = data['lastMessage'] as String?;
           final updatedAt = data['updatedAt'];
@@ -176,10 +173,10 @@ class _ClientMessagesScreenState extends State<ClientMessagesScreen> {
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               leading: CircleAvatar(
                 backgroundColor: AppColors.primaryLight,
-                backgroundImage: (nurse?.photoUrl?.isNotEmpty ?? false)
-                    ? NetworkImage(nurse!.photoUrl!)
+                backgroundImage: (client?.photoUrl?.isNotEmpty ?? false)
+                    ? NetworkImage(client!.photoUrl!)
                     : null,
-                child: (nurse?.photoUrl?.isNotEmpty ?? false)
+                child: (client?.photoUrl?.isNotEmpty ?? false)
                     ? null
                     : Icon(Icons.person_outline, color: AppColors.primary),
               ),
@@ -207,7 +204,7 @@ class _ClientMessagesScreenState extends State<ClientMessagesScreen> {
                     ),
               onTap: bookingId == null
                   ? null
-                  : () => context.push('/client/chat/$bookingId'),
+                  : () => context.push('/nurse/chat/$bookingId'),
             ),
           );
         },

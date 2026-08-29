@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../services/booking_service.dart';
+import '../../../services/user_service.dart';
 import '../../shared/models/booking.dart';
+import '../../shared/models/app_user.dart';
 
 class CurrentShiftScreen extends StatefulWidget {
-  const CurrentShiftScreen({super.key});
+  /// When provided, shows this specific booking. Otherwise falls back to the
+  /// nurse's most recent active (confirmed/in_progress) booking.
+  final String? bookingId;
+  const CurrentShiftScreen({super.key, this.bookingId});
 
   @override
   State<CurrentShiftScreen> createState() => _CurrentShiftScreenState();
@@ -15,6 +21,7 @@ class CurrentShiftScreen extends StatefulWidget {
 
 class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
   Booking? _booking;
+  AppUser? _client;
   bool _isLoading = true;
   String? _errorMessage;
   bool _isCheckedIn = false;
@@ -41,29 +48,45 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
         return;
       }
 
-      final snapshot = await FirebaseFirestore.instance
-          .collection('bookings')
-          .where('nurseId', isEqualTo: user.uid)
-          .where('status', whereIn: ['confirmed', 'in_progress'])
-          .orderBy('createdAt', descending: true)
-          .limit(1)
-          .get();
+      Booking? booking;
+      final requestedId = widget.bookingId;
+      if (requestedId != null && requestedId.isNotEmpty) {
+        booking = await BookingService().getBooking(requestedId);
+      } else {
+        final snapshot = await FirebaseFirestore.instance
+            .collection('bookings')
+            .where('nurseId', isEqualTo: user.uid)
+            .where('status', whereIn: ['confirmed', 'in_progress'])
+            .orderBy('createdAt', descending: true)
+            .limit(1)
+            .get();
+        if (snapshot.docs.isNotEmpty) {
+          booking = Booking.fromFirestore(snapshot.docs.first);
+        }
+      }
 
-      if (snapshot.docs.isNotEmpty) {
+      if (booking != null) {
+        final client = await UserService().getUser(booking.clientId);
+        if (!mounted) return;
         setState(() {
-          _booking = Booking.fromFirestore(snapshot.docs.first);
-          _isCheckedIn = _booking!.status == 'in_progress';
-          _isCheckedOut = _booking!.status == 'completed';
+          _booking = booking;
+          _client = client;
+          _isCheckedIn = booking!.status == 'in_progress';
+          _isCheckedOut = booking.status == 'completed';
         });
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'حدث خطأ';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'حدث خطأ أثناء تحميل الشيفت';
+        });
+      }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -74,6 +97,7 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
     });
     try {
       await BookingService().checkInShift(_booking!.id);
+      if (!mounted) return;
       setState(() {
         _isCheckedIn = true;
         _booking = _booking!.copyWith(status: 'in_progress');
@@ -81,13 +105,17 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('تم تسجيل الحضور')));
     } catch (e) {
-      setState(() {
-        _errorMessage = 'خطأ في تسجيل الحضور';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'خطأ في تسجيل الحضور';
+        });
+      }
     } finally {
-      setState(() {
-        _isProcessing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 
@@ -98,6 +126,7 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
     });
     try {
       await BookingService().checkOutShift(_booking!.id);
+      if (!mounted) return;
       setState(() {
         _isCheckedOut = true;
         _booking = _booking!.copyWith(status: 'completed');
@@ -105,19 +134,24 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('تم تسجيل الانصراف')));
     } catch (e) {
-      setState(() {
-        _errorMessage = 'خطأ في تسجيل الانصراف';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'خطأ في تسجيل الانصراف';
+        });
+      }
     } finally {
-      setState(() {
-        _isProcessing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('الشيفت الحالي')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -135,11 +169,54 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
                     ]))
               : _booking == null
                   ? const Center(child: Text('لا يوجد شيفت حالياً'))
-                  : Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  : RefreshIndicator(
+                      onRefresh: _loadCurrentShift,
+                      child: ListView(
+                        padding: const EdgeInsets.all(16.0),
                         children: [
+                          // Client card
+                          Card(
+                            margin: EdgeInsets.zero,
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 26,
+                                    backgroundColor: AppColors.primaryLight,
+                                    backgroundImage: (_client?.photoUrl?.isNotEmpty ?? false)
+                                        ? NetworkImage(_client!.photoUrl!)
+                                        : null,
+                                    child: (_client?.photoUrl?.isNotEmpty ?? false)
+                                        ? null
+                                        : Icon(Icons.person_outline, color: AppColors.primary),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _client?.name.trim().isNotEmpty == true
+                                              ? _client!.name.trim()
+                                              : 'العميل',
+                                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                                        ),
+                                        if (_client?.phone.isNotEmpty ?? false)
+                                          Text(_client!.phone, style: const TextStyle(color: AppColors.textSecondary)),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'مراسلة العميل',
+                                    onPressed: () => context.push('/nurse/chat/${_booking!.id}'),
+                                    icon: const Icon(Icons.chat_bubble_outline, color: AppColors.primary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
                           // Status Badge
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -160,19 +237,23 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          _buildInfoRow(
-                              'رقم الحجز', _booking!.id.substring(0, 8)),
-                          _buildInfoRow('التاريخ',
-                              DateFormat.yMMMd().format(_booking!.shiftStart)),
-                          _buildInfoRow('البداية',
-                              DateFormat.jm().format(_booking!.shiftStart)),
-                          _buildInfoRow('النهاية',
-                              DateFormat.jm().format(_booking!.shiftEnd)),
-                          _buildInfoRow(
-                              'المدة', '${_booking!.shiftHours} ساعة'),
-                          _buildInfoRow(
-                              'السعر', '${_booking!.totalAmount} ج.م'),
-                          const Spacer(),
+                          Card(
+                            margin: EdgeInsets.zero,
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                children: [
+                                  _buildInfoRow('رقم الحجز', _booking!.id.substring(0, 8)),
+                                  _buildInfoRow('التاريخ', DateFormat.yMMMd().format(_booking!.shiftStart)),
+                                  _buildInfoRow('البداية', DateFormat.jm().format(_booking!.shiftStart)),
+                                  _buildInfoRow('النهاية', DateFormat.jm().format(_booking!.shiftEnd)),
+                                  _buildInfoRow('المدة', '${_booking!.shiftHours} ساعة'),
+                                  _buildInfoRow('السعر', '${_booking!.totalAmount} ج.م'),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
                           if (_isCheckedOut)
                             const Center(
                                 child: Text('تم الانتهاء من الشيفت',
@@ -211,7 +292,6 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
                                     : const Text('تسجيل الانصراف (Check-out)'),
                               ),
                             ),
-                          const SizedBox(height: 16),
                         ],
                       ),
                     ),

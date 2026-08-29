@@ -30,4 +30,25 @@ class UserService {
     final user = await getUser(uid);
     return user?.role;
   }
+
+  /// Fetches multiple users by uid in as few reads as possible.
+  /// Used by the chat/messages screens to resolve the other side's
+  /// display name (client sees the nurse's name, nurse sees the client's).
+  Future<Map<String, AppUser>> getUsersByIds(Iterable<String> uids) async {
+    final ids = uids.where((e) => e.trim().isNotEmpty).toSet().toList();
+    if (ids.isEmpty) return {};
+    final result = <String, AppUser>{};
+    // Firestore whereIn supports up to 30 values per query.
+    for (var i = 0; i < ids.length; i += 30) {
+      final chunk = ids.sublist(i, i + 30 > ids.length ? ids.length : i + 30);
+      final snap = await _firestore
+          .collection('users')
+          .where(FieldPath.documentId, whereIn: chunk)
+          .get();
+      for (final doc in snap.docs) {
+        result[doc.id] = AppUser.fromFirestore(doc);
+      }
+    }
+    return result;
+  }
 }
