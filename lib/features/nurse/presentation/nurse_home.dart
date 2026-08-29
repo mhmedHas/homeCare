@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../services/user_service.dart';
 import '../../shared/models/care_request.dart';
 import '../../shared/models/booking.dart';
@@ -129,7 +130,7 @@ class _NurseHomeScreenState extends State<NurseHomeScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('لوحة الممرض'),
+        title: Text(AppStrings.t('nurse_home_title')),
         automaticallyImplyLeading: false,
       ),
       body: _isLoading
@@ -160,10 +161,10 @@ class _NurseHomeScreenState extends State<NurseHomeScreen> {
                           children: [
                             const Icon(Icons.warning_amber_rounded, color: Colors.amber),
                             const SizedBox(width: 10),
-                            const Expanded(
+                            Expanded(
                               child: Text(
-                                'أكمل بيانات عملك وارفع مستنداتك عشان تقدر تستقبل طلبات',
-                                style: TextStyle(color: AppColors.textPrimary),
+                                AppStrings.t('nurse_complete_verification'),
+                                style: const TextStyle(color: AppColors.textPrimary),
                               ),
                             ),
                             const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.textSecondary),
@@ -176,11 +177,11 @@ class _NurseHomeScreenState extends State<NurseHomeScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: _buildStatCard('طلبات جديدة', '$_pendingRequestsCount', Icons.request_page, Colors.blue),
+                        child: _buildStatCard(AppStrings.t('nurse_new_requests'), '$_pendingRequestsCount', Icons.request_page, Colors.blue),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: _buildStatCard('شيفت اليوم', '$_todayShiftsCount', Icons.today, Colors.green),
+                        child: _buildStatCard(AppStrings.t('nurse_today_shifts'), '$_todayShiftsCount', Icons.today, Colors.green),
                       ),
                     ],
                   ),
@@ -188,13 +189,13 @@ class _NurseHomeScreenState extends State<NurseHomeScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: _buildStatCard('الأرباح', '${_totalEarnings.toStringAsFixed(0)} ج.م', Icons.account_balance_wallet_outlined, Colors.orange),
+                        child: _buildStatCard(AppStrings.t('nurse_earnings'), '${_totalEarnings.toStringAsFixed(0)} ${AppStrings.t('currency_egp')}', Icons.account_balance_wallet_outlined, Colors.orange),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: _buildStatCard(
-                          'التقييم',
-                          _averageRating > 0 ? '${_averageRating.toStringAsFixed(1)} ⭐' : 'لا يوجد',
+                          AppStrings.t('nurse_rating'),
+                          _averageRating > 0 ? '${_averageRating.toStringAsFixed(1)} ⭐' : AppStrings.t('none'),
                           Icons.star_rounded,
                           Colors.amber,
                         ),
@@ -206,25 +207,24 @@ class _NurseHomeScreenState extends State<NurseHomeScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('الطلبات المتاحة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(AppStrings.t('nurse_available_requests'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                       TextButton(
                         onPressed: () => context.push('/nurse/available-requests'),
-                        child: const Text('عرض الكل'),
+                        child: Text(AppStrings.t('view_all')),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
 
                   if (_availableRequests.isEmpty)
-                    const Card(
+                    Card(
                       child: Padding(
-                        padding: EdgeInsets.all(24.0),
+                        padding: const EdgeInsets.all(24.0),
                         child: Column(
                           children: [
-                            Icon(Icons.search_off, size: 48, color: Colors.grey),
-                            SizedBox(height: 8),
-                            Text('لا توجد طلبات حالياً', style: TextStyle(fontSize: 16)),
-                            Text('سيتم إظهار الطلبات المناسبة هنا', style: TextStyle(color: AppColors.textSecondary)),
+                            const Icon(Icons.search_off, size: 48, color: Colors.grey),
+                            const SizedBox(height: 8),
+                            Text(AppStrings.t('nurse_no_requests'), style: const TextStyle(fontSize: 16)),
                           ],
                         ),
                       ),
@@ -246,7 +246,7 @@ class _NurseHomeScreenState extends State<NurseHomeScreen> {
                             ),
                             title: Text(request.patientName),
                             subtitle: Text(
-                              '${request.careType} • ${request.shiftHours} ساعة • ${request.governorate}',
+                              '${request.careType} • ${request.shiftHours} ${AppStrings.t('hours_short')} • ${request.governorate}',
                               style: const TextStyle(fontSize: 12),
                             ),
                             trailing: const Icon(Icons.arrow_forward_ios, size: 16),

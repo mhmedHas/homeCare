@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_strings.dart';
+import '../../../core/constants/locale_controller.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/care_request_service.dart';
 import '../../../services/user_service.dart';
@@ -46,15 +48,15 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final name = _user?.name.trim().isNotEmpty == true ? _user!.name.trim() : 'العميل';
+    final name = _user?.name.trim().isNotEmpty == true ? _user!.name.trim() : AppStrings.t('role_client');
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const Text('الرئيسية'),
+        title: Text(AppStrings.t('nav_home')),
         actions: [
           IconButton(
-            tooltip: 'تسجيل الخروج', icon: const Icon(Icons.logout_outlined),
+            tooltip: AppStrings.t('logout'), icon: const Icon(Icons.logout_outlined),
             onPressed: () async { await AuthService().logout(); if (context.mounted) context.go('/login'); },
           ),
         ],
@@ -79,14 +81,14 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                       ),
                       const SizedBox(height: 12),
                       Row(children: [
-                        Expanded(child: _QuickAction(icon: Icons.calendar_month_outlined, title: 'حجوزاتي', onTap: () => context.go('/client/my-bookings'))),
+                        Expanded(child: _QuickAction(icon: Icons.calendar_month_outlined, title: AppStrings.t('nav_bookings'), onTap: () => context.go('/client/my-bookings'))),
                         const SizedBox(width: 12),
-                        Expanded(child: _QuickAction(icon: Icons.chat_bubble_outline, title: 'الرسائل', onTap: () => context.go('/client/messages'))),
+                        Expanded(child: _QuickAction(icon: Icons.chat_bubble_outline, title: AppStrings.t('nav_messages'), onTap: () => context.go('/client/messages'))),
                       ]),
                       const SizedBox(height: 24),
                       Row(children: [
-                        Expanded(child: Text('آخر طلبات الرعاية', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700))),
-                        if (_requests.isNotEmpty) TextButton(onPressed: () => context.go('/client/my-requests'), child: const Text('عرض الكل')),
+                        Expanded(child: Text(AppStrings.t('my_recent_requests'), style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700))),
+                        if (_requests.isNotEmpty) TextButton(onPressed: () => context.go('/client/my-requests'), child: Text(AppStrings.t('view_all'))),
                       ]),
                       const SizedBox(height: 8),
                       if (_requests.isEmpty) _emptyRequests() else ..._requests.take(3).map(_requestCard),
@@ -101,7 +103,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     child: Column(mainAxisSize: MainAxisSize.min, children: [
       Icon(Icons.cloud_off_outlined, size: 48, color: theme.colorScheme.error),
       const SizedBox(height: 12), Text(_errorMessage!, textAlign: TextAlign.center), const SizedBox(height: 16),
-      FilledButton.icon(onPressed: _loadHome, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة')),
+      FilledButton.icon(onPressed: _loadHome, icon: const Icon(Icons.refresh), label: Text(AppStrings.t('retry'))),
     ]),
   ));
 
@@ -109,8 +111,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     padding: const EdgeInsets.all(18),
     child: Column(children: [
       const Icon(Icons.post_add_outlined, size: 42), const SizedBox(height: 8),
-      const Text('لسه مفيش طلبات رعاية'), const SizedBox(height: 10),
-      OutlinedButton(onPressed: () => context.push('/client/create-request'), child: const Text('إنشاء طلب')),
+      Text(AppStrings.t('no_requests_yet')), const SizedBox(height: 10),
+      OutlinedButton(onPressed: () => context.push('/client/create-request'), child: Text(AppStrings.t('create_request_short'))),
     ]),
   ));
 
@@ -124,8 +126,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(request.careType, style: const TextStyle(fontWeight: FontWeight.w700)), const SizedBox(height: 4),
-          Text('${request.shiftHours} ساعة × ${request.daysCount} يوم • ${request.governorate}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          const SizedBox(height: 3), Text(DateFormat('d/M/yyyy', 'ar').format(request.startDate), style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          Text('${request.shiftHours} ${AppStrings.t('hours_short')} \u00d7 ${request.daysCount} ${AppStrings.t('days_short')} \u2022 ${request.governorate}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          const SizedBox(height: 3), Text(DateFormat('d/M/yyyy', LocaleController.instance.locale.languageCode).format(request.startDate), style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
         ])),
         _Badge(text: status.$1, color: status.$2),
       ])),
@@ -134,12 +136,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   (String, Color) _status(String value) {
     switch (value) {
-      case 'open': return ('مفتوح', AppColors.primary);
-      case 'booked': return ('تم اختيار ممرض', Colors.blue);
-      case 'in_progress': return ('جاري', Colors.orange);
-      case 'completed': return ('مكتمل', Colors.green);
-      case 'cancelled': return ('ملغي', AppColors.error);
-      default: return ('قيد المراجعة', Colors.grey);
+      case 'open': return (AppStrings.t('status_open'), AppColors.primary);
+      case 'booked': return (AppStrings.t('status_booked'), Colors.blue);
+      case 'in_progress': return (AppStrings.t('status_in_progress'), Colors.orange);
+      case 'completed': return (AppStrings.t('status_completed'), Colors.green);
+      case 'cancelled': return (AppStrings.t('status_cancelled'), AppColors.error);
+      default: return (AppStrings.t('status_pending'), Colors.grey);
     }
   }
 }
@@ -151,8 +153,8 @@ class _WelcomeCard extends StatelessWidget {
   Widget build(BuildContext context) => Card(margin: EdgeInsets.zero, child: Padding(padding: const EdgeInsets.all(20), child: Row(children: [
     const CircleAvatar(radius: 28, child: Icon(Icons.person_outline, size: 30)), const SizedBox(width: 14),
     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('أهلاً يا $name 👋', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-      const SizedBox(height: 4), const Text('إحنا هنا عشان نسهّل عليك رعاية الحالة في البيت.'),
+      Text('${AppStrings.t('welcome_hi')} $name \ud83d\udc4b', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+      const SizedBox(height: 4), Text(AppStrings.t('welcome_subtitle')),
     ])),
   ])));
 }
@@ -163,9 +165,9 @@ class _RequestCareCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(margin: EdgeInsets.zero, child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
     const Icon(Icons.medical_services_outlined, size: 34), const SizedBox(height: 12),
-    Text('محتاج ممرض؟', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-    const SizedBox(height: 6), const Text('أنشئ طلب رعاية وحدد احتياجات الحالة، وبعدها اختار مقدم الرعاية المناسب.'), const SizedBox(height: 16),
-    SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: onPressed, icon: const Icon(Icons.add_circle_outline), label: const Text('اطلب رعاية'))),
+    Text(AppStrings.t('need_nurse_title'), style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+    const SizedBox(height: 6), Text(AppStrings.t('need_nurse_desc')), const SizedBox(height: 16),
+    SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: onPressed, icon: const Icon(Icons.add_circle_outline), label: Text(AppStrings.t('request_care_action')))),
   ])));
 }
 
@@ -181,7 +183,7 @@ class _RequestsShortcut extends StatelessWidget {
       child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
         Container(width: 48, height: 48, decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: .10), borderRadius: BorderRadius.circular(14)), child: const Icon(Icons.assignment_outlined)),
         const SizedBox(width: 12),
-        const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('طلبات الرعاية', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)), SizedBox(height: 3), Text('تابع طلباتك وشوف عروض الممرضين واختار المناسب', style: TextStyle(color: AppColors.textSecondary, fontSize: 12))])),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(AppStrings.t('nav_care_requests'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)), const SizedBox(height: 3), Text(AppStrings.t('care_requests_shortcut_desc'), style: const TextStyle(color: AppColors.textSecondary, fontSize: 12))])),
         Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: AppColors.primaryLight, borderRadius: BorderRadius.circular(20)), child: Text('$count', style: const TextStyle(fontWeight: FontWeight.w800))),
         const SizedBox(width: 4), const Icon(Icons.chevron_left),
       ]),),

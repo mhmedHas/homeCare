@@ -1,12 +1,11 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_strings.dart';
+import '../../../core/constants/locale_controller.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/user_service.dart';
 import '../../../services/shared_preferences_service.dart';
-import '../../../services/supabase_storage_service.dart';
 import '../../shared/models/app_user.dart';
 
 class ClientProfileScreen extends StatefulWidget {
@@ -17,11 +16,8 @@ class ClientProfileScreen extends StatefulWidget {
 }
 
 class _ClientProfileScreenState extends State<ClientProfileScreen> {
-  final _picker = ImagePicker();
-  final _storage = SupabaseStorageService();
   AppUser? _user;
   bool _isLoading = true;
-  bool _isUploadingPhoto = false;
   String? _errorMessage;
 
   @override
@@ -55,50 +51,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       setState(() {
         _isLoading = false;
       });
-    }
-  }
-
-  Future<void> _pickAndUploadPhoto() async {
-    if (_isUploadingPhoto || _user == null) return;
-    try {
-      final source = await showModalBottomSheet<ImageSource>(
-        context: context,
-        builder: (context) => SafeArea(
-          child: Wrap(children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt_outlined),
-              title: const Text('التقاط صورة'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('اختيار من المعرض'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-          ]),
-        ),
-      );
-      if (source == null) return;
-
-      final image = await _picker.pickImage(source: source, imageQuality: 85, maxWidth: 1200, maxHeight: 1200);
-      if (image == null) return;
-      final Uint8List bytes = await image.readAsBytes();
-      if (bytes.isEmpty) return;
-
-      setState(() => _isUploadingPhoto = true);
-      final url = await _storage.uploadClientProfilePhoto(uid: _user!.uid, bytes: bytes);
-      await UserService().updateUser(_user!.uid, {'photoUrl': url});
-      if (!mounted) return;
-      setState(() => _user = _user!.copyWith(photoUrl: url));
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث الصورة الشخصية')));
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذر رفع الصورة، حاول مرة أخرى')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isUploadingPhoto = false);
     }
   }
 
@@ -170,7 +122,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('حسابي')),
+      appBar: AppBar(title: Text(AppStrings.t('my_account'))),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null || _user == null
@@ -186,39 +138,13 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                           padding: const EdgeInsets.all(20),
                           child: Column(
                             children: [
-                              Stack(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 46,
-                                    backgroundColor: AppColors.primary,
-                                    backgroundImage: (_user!.photoUrl?.isNotEmpty ?? false)
-                                        ? NetworkImage(_user!.photoUrl!)
-                                        : null,
-                                    child: (_user!.photoUrl?.isNotEmpty ?? false)
-                                        ? null
-                                        : Text(
-                                            _user!.name.isNotEmpty ? _user!.name[0] : '?',
-                                            style: const TextStyle(fontSize: 36, color: Colors.white),
-                                          ),
-                                  ),
-                                  Positioned(
-                                    bottom: 0,
-                                    right: 0,
-                                    child: InkWell(
-                                      onTap: _pickAndUploadPhoto,
-                                      borderRadius: BorderRadius.circular(20),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(6),
-                                        decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle),
-                                        child: _isUploadingPhoto
-                                            ? const SizedBox(
-                                                width: 16, height: 16,
-                                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                            : const Icon(Icons.camera_alt, size: 16, color: Colors.white),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              CircleAvatar(
+                                radius: 46,
+                                backgroundColor: AppColors.primary,
+                                child: Text(
+                                  _user!.name.isNotEmpty ? _user!.name[0] : '?',
+                                  style: const TextStyle(fontSize: 36, color: Colors.white),
+                                ),
                               ),
                               const SizedBox(height: 12),
                               Text(_user!.name, style: Theme.of(context).textTheme.headlineSmall),
@@ -231,16 +157,41 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      _buildMenuItem(Icons.edit_outlined, 'تعديل البيانات', _editInfo),
-                      _buildMenuItem(Icons.history, 'حجوزاتي', () => context.push('/client/my-bookings')),
-                      _buildMenuItem(Icons.list_alt_outlined, 'طلباتي', () => context.push('/client/my-requests')),
-                      _buildMenuItem(Icons.chat_bubble_outline, 'الرسائل', () => context.push('/client/messages')),
-                      _buildMenuItem(Icons.help_outline, 'المساعدة', _showHelp),
+                      _buildLanguageToggle(),
                       const SizedBox(height: 8),
-                      _buildMenuItem(Icons.logout, 'تسجيل الخروج', _logout, isDestructive: true),
+                      _buildMenuItem(Icons.edit_outlined, AppStrings.t('edit_info'), _editInfo),
+                      _buildMenuItem(Icons.history, AppStrings.t('my_bookings'), () => context.push('/client/my-bookings')),
+                      _buildMenuItem(Icons.list_alt_outlined, AppStrings.t('my_requests'), () => context.push('/client/my-requests')),
+                      _buildMenuItem(Icons.chat_bubble_outline, AppStrings.t('nav_messages'), () => context.push('/client/messages')),
+                      _buildMenuItem(Icons.help_outline, AppStrings.t('help'), _showHelp),
+                      const SizedBox(height: 8),
+                      _buildMenuItem(Icons.logout, AppStrings.t('logout'), _logout, isDestructive: true),
                     ],
                   ),
                 ),
+    );
+  }
+
+  Widget _buildLanguageToggle() {
+    final isEnglish = LocaleController.instance.isEnglish;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ListTile(
+        leading: const Icon(Icons.language, color: AppColors.primary),
+        title: Text(AppStrings.t('language')),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(isEnglish ? AppStrings.t('english') : AppStrings.t('arabic')),
+            Switch(
+              value: isEnglish,
+              onChanged: (value) {
+                LocaleController.instance.setLocale(value ? const Locale('en', 'US') : const Locale('ar', 'EG'));
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 

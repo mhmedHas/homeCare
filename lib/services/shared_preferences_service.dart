@@ -28,6 +28,11 @@ class SharedPreferencesService {
   Future<void> setThemeMode(String mode) =>
       _prefs.setString('theme_mode', mode);
 
+  // App language ('ar' or 'en') — shared by both client and nurse.
+  String? getLocaleCode() => _prefs.getString('app_locale_code');
+  Future<void> setLocaleCode(String code) =>
+      _prefs.setString('app_locale_code', code);
+
   // Clear non-sensitive temp data
   Future<void> clearTempPreferences() async {
     await _prefs.remove('selected_role');
