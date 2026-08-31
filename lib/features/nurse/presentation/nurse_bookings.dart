@@ -1,189 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/locale_controller.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/booking_service.dart';
 import '../../../services/user_service.dart';
 import '../../shared/models/booking.dart';
 import '../../shared/models/app_user.dart';
 
-class NurseBookingsScreen extends StatefulWidget {
-  const NurseBookingsScreen({super.key});
-
-  @override
-  State<NurseBookingsScreen> createState() => _NurseBookingsScreenState();
+class NurseBookingsScreen extends StatefulWidget{const NurseBookingsScreen({super.key});@override State<NurseBookingsScreen> createState()=>_NurseBookingsScreenState();}
+class _NurseBookingsScreenState extends State<NurseBookingsScreen> with SingleTickerProviderStateMixin{late final TabController _tabs;List<Booking> _bookings=[];Map<String,AppUser> _clients={};bool _loading=true;String? _error;bool get en=>LocaleController.instance.isEnglish;String tx(String ar,String english)=>en?english:ar;
+ @override void initState(){super.initState();_tabs=TabController(length:4,vsync:this);_load();}@override void dispose(){_tabs.dispose();super.dispose();}
+ Future<void> _load()async{if(mounted)setState((){_loading=true;_error=null;});try{final user=AuthService().currentUser;if(user==null)throw StateError('auth');final data=await BookingService().getNurseBookings(user.uid);final clients=await UserService().getUsersByIds(data.map((b)=>b.clientId));if(mounted)setState((){_bookings=data;_clients=clients;});}catch(_){if(mounted)setState(()=>_error=tx('تعذر تحميل الحجوزات. حاول مرة أخرى.','Unable to load bookings. Please try again.'));}finally{if(mounted)setState(()=>_loading=false);}}
+ List<Booking> _forTab(int i)=>i==1?_bookings.where((b)=>['pending_payment','confirmed','in_progress'].contains(b.status)).toList():i==2?_bookings.where((b)=>b.status=='completed').toList():i==3?_bookings.where((b)=>b.status=='cancelled').toList():_bookings;
+ @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:Text(tx('حجوزاتي','My bookings')),automaticallyImplyLeading:false,actions:[IconButton(onPressed:_load,tooltip:tx('تحديث','Refresh'),icon:const Icon(Icons.refresh))],bottom:TabBar(controller:_tabs,isScrollable:true,tabs:[Tab(text:tx('الكل','All')),Tab(text:tx('القادمة','Upcoming')),Tab(text:tx('السابقة','Previous')),Tab(text:tx('الملغاة','Cancelled'))])),body:_loading?const Center(child:CircularProgressIndicator()):_error!=null?_ErrorView(message:_error!,onRetry:_load):TabBarView(controller:_tabs,children:List.generate(4,(i)=>_BookingList(bookings:_forTab(i),clients:_clients,onRefresh:_load)));}
 }
-
-class _NurseBookingsScreenState extends State<NurseBookingsScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabs;
-  List<Booking> _bookings = [];
-  Map<String, AppUser> _clients = {};
-  bool _loading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabs = TabController(length: 4, vsync: this);
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    if (mounted) setState(() { _loading = true; _error = null; });
-    try {
-      final user = AuthService().currentUser;
-      if (user == null) throw StateError('auth');
-      final data = await BookingService().getNurseBookings(user.uid);
-      final clients = await UserService().getUsersByIds(data.map((b) => b.clientId));
-      if (!mounted) return;
-      setState(() {
-        _bookings = data;
-        _clients = clients;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _error = 'تعذر تحميل الحجوزات. حاول مرة أخرى.');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  List<Booking> _forTab(int index) {
-    if (index == 1) {
-      return _bookings.where((b) => b.status == 'pending_payment' || b.status == 'confirmed' || b.status == 'in_progress').toList();
-    }
-    if (index == 2) return _bookings.where((b) => b.status == 'completed').toList();
-    if (index == 3) return _bookings.where((b) => b.status == 'cancelled').toList();
-    return _bookings;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('حجوزاتي'),
-        automaticallyImplyLeading: false,
-        actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))],
-        bottom: TabBar(
-          controller: _tabs,
-          isScrollable: true,
-          tabs: const [Tab(text: 'الكل'), Tab(text: 'القادمة'), Tab(text: 'السابقة'), Tab(text: 'الملغاة')],
-        ),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _ErrorView(message: _error!, onRetry: _load)
-              : TabBarView(
-                  controller: _tabs,
-                  children: List.generate(4, (i) => _BookingList(bookings: _forTab(i), clients: _clients)),
-                ),
-    );
-  }
-}
-
-class _BookingList extends StatelessWidget {
-  final List<Booking> bookings;
-  final Map<String, AppUser> clients;
-  const _BookingList({required this.bookings, required this.clients});
-
-  @override
-  Widget build(BuildContext context) {
-    if (bookings.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: () async {},
-        child: ListView(children: const [
-          SizedBox(height: 120),
-          Icon(Icons.calendar_month_outlined, size: 60),
-          SizedBox(height: 12),
-          Center(child: Text('لا توجد حجوزات هنا', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
-          SizedBox(height: 6),
-          Center(child: Text('ستظهر الحجوزات التي تخصك هنا.')),
-        ]),
-      );
-    }
-
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      physics: const AlwaysScrollableScrollPhysics(),
-      itemCount: bookings.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (_, index) {
-        final b = bookings[index];
-        final client = clients[b.clientId];
-        final clientName = client?.name.trim().isNotEmpty == true ? client!.name.trim() : 'عميل';
-        return Card(
-          margin: EdgeInsets.zero,
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(14),
-            leading: CircleAvatar(
-              backgroundColor: AppColors.primaryLight,
-              backgroundImage: (client?.photoUrl?.isNotEmpty ?? false) ? NetworkImage(client!.photoUrl!) : null,
-              child: (client?.photoUrl?.isNotEmpty ?? false) ? null : Icon(Icons.person_outline, color: AppColors.primary),
-            ),
-            title: Text(clientName, style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text('${_date(b.shiftStart)}\n${b.totalAmount.toStringAsFixed(0)} ج.م'),
-            ),
-            isThreeLine: true,
-            trailing: _Status(status: b.status),
-            onTap: () => context.push('/nurse/current-shift?bookingId=${b.id}'),
-          ),
-        );
-      },
-    );
-  }
-
-  String _date(DateTime date) => '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-}
-
-class _Status extends StatelessWidget {
-  final String status;
-  const _Status({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    String text;
-    Color color;
-    switch (status) {
-      case 'pending_payment': text = 'انتظار الدفع'; color = Colors.orange; break;
-      case 'confirmed': text = 'مؤكد'; color = Colors.blue; break;
-      case 'in_progress': text = 'جاري'; color = Colors.purple; break;
-      case 'completed': text = 'مكتمل'; color = AppColors.success; break;
-      case 'cancelled': text = 'ملغي'; color = AppColors.error; break;
-      default: text = 'غير معروف'; color = Colors.grey; break;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(color: color.withValues(alpha: .12), borderRadius: BorderRadius.circular(12)),
-      child: Text(text, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-  const _ErrorView({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.cloud_off_outlined, size: 52),
-        const SizedBox(height: 12),
-        Text(message, textAlign: TextAlign.center),
-        const SizedBox(height: 16),
-        FilledButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة')),
-      ]),
-    ),
-  );
-}
+class _BookingList extends StatelessWidget{final List<Booking> bookings;final Map<String,AppUser> clients;final Future<void> Function() onRefresh;const _BookingList({required this.bookings,required this.clients,required this.onRefresh});@override Widget build(BuildContext context){final en=LocaleController.instance.isEnglish;String tx(String ar,String english)=>en?english:ar;if(bookings.isEmpty)return RefreshIndicator(onRefresh:onRefresh,child:ListView(physics:const AlwaysScrollableScrollPhysics(),children:[const SizedBox(height:120),const Icon(Icons.calendar_month_outlined,size:60),const SizedBox(height:12),Center(child:Text(tx('لا توجد حجوزات هنا','No bookings here'),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:18))),const SizedBox(height:6),Center(child:Text(tx('ستظهر الحجوزات التي تخصك هنا.','Your bookings will appear here.')))]));return ListView.separated(padding:const EdgeInsets.all(16),physics:const AlwaysScrollableScrollPhysics(),itemCount:bookings.length,separatorBuilder:(_,__)=>const SizedBox(height:10),itemBuilder:(_,i){final b=bookings[i];final c=clients[b.clientId];final name=c?.name.trim().isNotEmpty==true?c!.name.trim():tx('عميل','Client');return Card(margin:EdgeInsets.zero,child:ListTile(contentPadding:const EdgeInsets.all(14),leading:CircleAvatar(backgroundColor:AppColors.primaryLight,backgroundImage:(c?.photoUrl?.isNotEmpty??false)?NetworkImage(c!.photoUrl!):null,child:(c?.photoUrl?.isNotEmpty??false)?null:const Icon(Icons.person_outline)),title:Text(name,style:const TextStyle(fontWeight:FontWeight.w700)),subtitle:Padding(padding:const EdgeInsets.only(top:6),child:Text('${b.shiftStart.day.toString().padLeft(2,'0')}/${b.shiftStart.month.toString().padLeft(2,'0')}/${b.shiftStart.year}\n${b.totalAmount.toStringAsFixed(0)} ${tx('ج.م','EGP')}')),isThreeLine:true,trailing:_Status(status:b.status),onTap:()=>context.push('/nurse/current-shift?bookingId=${b.id}')));});}}
+class _Status extends StatelessWidget{final String status;const _Status({required this.status});@override Widget build(BuildContext context){final en=LocaleController.instance.isEnglish;String tx(String ar,String english)=>en?english:ar;late String text;late Color color;switch(status){case'pending_payment':text=tx('انتظار الدفع','Awaiting payment');color=Colors.orange;break;case'confirmed':text=tx('مؤكد','Confirmed');color=Colors.blue;break;case'in_progress':text=tx('جاري','In progress');color=Colors.purple;break;case'completed':text=tx('مكتمل','Completed');color=AppColors.success;break;case'cancelled':text=tx('ملغي','Cancelled');color=AppColors.error;break;default:text=tx('غير معروف','Unknown');color=Colors.grey;}return Container(padding:const EdgeInsets.symmetric(horizontal:8,vertical:6),decoration:BoxDecoration(color:color.withValues(alpha:.12),borderRadius:BorderRadius.circular(12)),child:Text(text,style:TextStyle(color:color,fontSize:11,fontWeight:FontWeight.w700)));}}
+class _ErrorView extends StatelessWidget{final String message;final VoidCallback onRetry;const _ErrorView({required this.message,required this.onRetry});@override Widget build(BuildContext context){final en=LocaleController.instance.isEnglish;return Center(child:Padding(padding:const EdgeInsets.all(24),child:Column(mainAxisSize:MainAxisSize.min,children:[const Icon(Icons.cloud_off_outlined,size:52),const SizedBox(height:12),Text(message,textAlign:TextAlign.center),const SizedBox(height:16),FilledButton.icon(onPressed:onRetry,icon:const Icon(Icons.refresh),label:Text(en?'Retry':'إعادة المحاولة'))])));}}
