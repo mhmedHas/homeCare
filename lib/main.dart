@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'core/constants/app_strings.dart';
 import 'core/constants/app_theme.dart';
 import 'core/constants/locale_controller.dart';
 import 'core/routing/app_router.dart';
@@ -40,10 +41,11 @@ class MyApp extends StatelessWidget {
     return ListenableBuilder(
       listenable: LocaleController.instance,
       builder: (context, _) {
+        final locale = LocaleController.instance.locale;
         return MaterialApp.router(
-          title: 'شفاء - Home Care',
+          title: AppStrings.t('app_name'),
           theme: AppTheme.lightTheme,
-          locale: LocaleController.instance.locale,
+          locale: locale,
           supportedLocales: const [Locale('ar', 'EG'), Locale('en', 'US')],
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
