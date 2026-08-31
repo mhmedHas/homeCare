@@ -1,164 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_strings.dart';
+import '../../../core/constants/locale_controller.dart';
 import '../../../services/booking_service.dart';
 import '../../../services/user_service.dart';
 import '../../shared/models/booking.dart';
 import '../../shared/models/app_user.dart';
 
-class BookingDetailsScreen extends StatefulWidget {
-  final String bookingId;
-  const BookingDetailsScreen({super.key, required this.bookingId});
-
-  @override
-  State<BookingDetailsScreen> createState() => _BookingDetailsScreenState();
-}
-
-class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
-  Booking? _booking;
-  AppUser? _nurse;
-  bool _isLoading = true;
-  String? _errorMessage;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    try {
-      final booking = await BookingService().getBooking(widget.bookingId);
-      if (booking == null) {
-        setState(() {
-          _errorMessage = 'الحجز غير موجود';
-        });
-        return;
-      }
-      setState(() {
-        _booking = booking;
-      });
-      final nurse = await UserService().getUser(booking.nurseId);
-      setState(() {
-        _nurse = nurse;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'حدث خطأ';
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('تفاصيل الحجز')),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null || _booking == null
-              ? Center(child: Text(_errorMessage ?? 'غير موجود'))
-              : Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Status
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: _getStatusColor(_booking!.status),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(_getStatusLabel(_booking!.status),
-                            style: const TextStyle(color: Colors.white)),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildInfoRow('رقم الحجز', _booking!.id),
-                      _buildInfoRow('الممرض', _nurse?.name ?? 'غير معروف'),
-                      _buildInfoRow('التاريخ',
-                          DateFormat.yMMMd().format(_booking!.shiftStart)),
-                      _buildInfoRow('الوقت',
-                          DateFormat.jm().format(_booking!.shiftStart)),
-                      _buildInfoRow('المدة', '${_booking!.shiftHours} ساعة'),
-                      _buildInfoRow('السعر', '${_booking!.totalAmount} ج.م'),
-                      _buildInfoRow('حالة الدفع', _booking!.paymentStatus),
-                      const Spacer(),
-                      if (_booking!.status == 'confirmed' ||
-                          _booking!.status == 'in_progress')
-                        ElevatedButton.icon(
-                          onPressed: () =>
-                              context.go('/client/chat/${_booking!.id}'),
-                          icon: const Icon(Icons.chat),
-                          label: const Text('التواصل مع الممرض'),
-                          style: ElevatedButton.styleFrom(
-                              minimumSize: const Size(double.infinity, 50)),
-                        ),
-                      if (_booking!.status == 'completed')
-                        ElevatedButton.icon(
-                          onPressed: () =>
-                              context.go('/client/rating/${_booking!.id}'),
-                          icon: const Icon(Icons.star_rate),
-                          label: const Text('تقييم الممرض'),
-                          style: ElevatedButton.styleFrom(
-                              minimumSize: const Size(double.infinity, 50)),
-                        ),
-                    ],
-                  ),
-                ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-        Expanded(child: Text(value, textAlign: TextAlign.end)),
-      ]),
-    );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'pending_payment':
-        return Colors.orange;
-      case 'confirmed':
-        return Colors.blue;
-      case 'in_progress':
-        return Colors.purple;
-      case 'completed':
-        return Colors.green;
-      case 'cancelled':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  String _getStatusLabel(String status) {
-    switch (status) {
-      case 'pending_payment':
-        return 'في انتظار الدفع';
-      case 'confirmed':
-        return 'مؤكد';
-      case 'in_progress':
-        return 'قيد التنفيذ';
-      case 'completed':
-        return 'مكتمل';
-      case 'cancelled':
-        return 'ملغي';
-      default:
-        return status;
-    }
-  }
+class BookingDetailsScreen extends StatefulWidget { final String bookingId; const BookingDetailsScreen({super.key,required this.bookingId}); @override State<BookingDetailsScreen> createState()=>_BookingDetailsScreenState(); }
+class _BookingDetailsScreenState extends State<BookingDetailsScreen>{ Booking? _booking; AppUser? _nurse; bool _isLoading=true; String? _errorMessage; String t(String k)=>AppStrings.t(k);
+ @override void initState(){super.initState();_loadData();}
+ Future<void> _loadData() async {if(mounted)setState((){_isLoading=true;_errorMessage=null;});try{final booking=await BookingService().getBooking(widget.bookingId);if(booking==null){if(mounted)setState(()=>_errorMessage=t('booking_not_found'));return;}final nurse=await UserService().getUser(booking.nurseId);if(mounted)setState((){_booking=booking;_nurse=nurse;});}catch(_){if(mounted)setState(()=>_errorMessage=t('error_generic'));}finally{if(mounted)setState(()=>_isLoading=false);}}
+ @override Widget build(BuildContext context){final b=_booking;final locale=LocaleController.instance.isEnglish?'en_US':'ar_EG';return Scaffold(appBar:AppBar(title:Text(t('booking_details')),actions:[IconButton(onPressed:_loadData,tooltip:t('retry'),icon:const Icon(Icons.refresh))]),body:_isLoading?const Center(child:CircularProgressIndicator()):_errorMessage!=null||b==null?Center(child:Column(mainAxisSize:MainAxisSize.min,children:[Text(_errorMessage??t('no_data')),const SizedBox(height:12),FilledButton(onPressed:_loadData,child:Text(t('retry')))])):ListView(padding:const EdgeInsets.all(16),children:[Container(padding:const EdgeInsets.symmetric(horizontal:12,vertical:8),decoration:BoxDecoration(color:_getStatusColor(b.status),borderRadius:BorderRadius.circular(10)),child:Text(_getStatusLabel(b.status),style:const TextStyle(color:Colors.white,fontWeight:FontWeight.bold))),const SizedBox(height:16),Card(child:Padding(padding:const EdgeInsets.all(16),child:Column(children:[_row(t('booking_number'),b.id),_row(t('nurse'),_nurse?.name??t('unknown')),_row(t('date'),DateFormat.yMMMd(locale).format(b.shiftStart)),_row(t('time'),DateFormat.jm(locale).format(b.shiftStart)),_row(t('duration'),'${b.shiftHours} ${t('hours_short')}'),_row(t('price'),'${b.totalAmount} ${t('currency_egp')}'),_row(t('payment_status'),_paymentStatus(b.paymentStatus))]))),const SizedBox(height:24),if(b.status=='confirmed'||b.status=='in_progress')SizedBox(height:52,child:FilledButton.icon(onPressed:()=>context.go('/client/chat/${b.id}'),icon:const Icon(Icons.chat_outlined),label:Text(t('contact_nurse')))),if(b.status=='completed')SizedBox(height:52,child:FilledButton.icon(onPressed:()=>context.go('/client/rating/${b.id}'),icon:const Icon(Icons.star_outline),label:Text(t('rate_nurse'))))]);}
+ Widget _row(String label,String value)=>Padding(padding:const EdgeInsets.symmetric(vertical:7),child:Row(children:[Expanded(child:Text(label,style:const TextStyle(fontWeight:FontWeight.bold))),Expanded(child:Text(value,textAlign:TextAlign.end))]));
+ Color _getStatusColor(String s){switch(s){case 'pending_payment':return Colors.orange;case 'confirmed':return Colors.blue;case 'in_progress':return Colors.purple;case 'completed':return Colors.green;case 'cancelled':return Colors.red;default:return Colors.grey;}}
+ String _getStatusLabel(String s){switch(s){case 'pending_payment':return t('status_pending_payment');case 'confirmed':return t('status_confirmed');case 'in_progress':return t('status_in_progress');case 'completed':return t('status_completed');case 'cancelled':return t('status_cancelled');default:return t('status_unknown');}}
+ String _paymentStatus(String s){switch(s){case 'paid':return t('payment_paid');case 'pending':return t('payment_pending');case 'failed':return t('payment_failed');case 'refunded':return t('payment_refunded');default:return s;}}
 }
