@@ -41,7 +41,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         _isLoading = false;
       });
     } catch (_) {
-      if (mounted) setState(() { _errorMessage = 'حدث خطأ في تحميل البيانات'; _isLoading = false; });
+      if (mounted) setState(() {
+        _errorMessage = AppStrings.t('error_load_home');
+        _isLoading = false;
+      });
     }
   }
 
@@ -75,10 +78,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                       const SizedBox(height: 16),
                       _RequestCareCard(onPressed: () => context.push('/client/create-request')),
                       const SizedBox(height: 16),
-                      _RequestsShortcut(
-                        count: _requests.length,
-                        onPressed: () => context.go('/client/my-requests'),
-                      ),
+                      _RequestsShortcut(count: _requests.length, onPressed: () => context.go('/client/my-requests')),
                       const SizedBox(height: 12),
                       Row(children: [
                         Expanded(child: _QuickAction(icon: Icons.calendar_month_outlined, title: AppStrings.t('nav_bookings'), onTap: () => context.go('/client/my-bookings'))),
@@ -118,6 +118,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   Widget _requestCard(CareRequest request) {
     final status = _status(request.status);
+    final dateLocale = LocaleController.instance.isEnglish ? 'en_US' : 'ar_EG';
     return Card(margin: const EdgeInsets.only(bottom: 10), child: InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: () => context.push('/client/request-details/${request.id}'),
@@ -126,8 +127,8 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(request.careType, style: const TextStyle(fontWeight: FontWeight.w700)), const SizedBox(height: 4),
-          Text('${request.shiftHours} ${AppStrings.t('hours_short')} \u00d7 ${request.daysCount} ${AppStrings.t('days_short')} \u2022 ${request.governorate}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          const SizedBox(height: 3), Text(DateFormat('d/M/yyyy', LocaleController.instance.locale.languageCode).format(request.startDate), style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          Text('${request.shiftHours} ${AppStrings.t('hours_short')} × ${request.daysCount} ${AppStrings.t('days_short')} • ${request.governorate}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          const SizedBox(height: 3), Text(DateFormat('d/M/yyyy', dateLocale).format(request.startDate), style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
         ])),
         _Badge(text: status.$1, color: status.$2),
       ])),
@@ -153,7 +154,7 @@ class _WelcomeCard extends StatelessWidget {
   Widget build(BuildContext context) => Card(margin: EdgeInsets.zero, child: Padding(padding: const EdgeInsets.all(20), child: Row(children: [
     const CircleAvatar(radius: 28, child: Icon(Icons.person_outline, size: 30)), const SizedBox(width: 14),
     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('${AppStrings.t('welcome_hi')} $name \ud83d\udc4b', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+      Text('${AppStrings.t('welcome_hi')} $name 👋', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
       const SizedBox(height: 4), Text(AppStrings.t('welcome_subtitle')),
     ])),
   ])));
@@ -185,7 +186,7 @@ class _RequestsShortcut extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(AppStrings.t('nav_care_requests'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)), const SizedBox(height: 3), Text(AppStrings.t('care_requests_shortcut_desc'), style: const TextStyle(color: AppColors.textSecondary, fontSize: 12))])),
         Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: AppColors.primaryLight, borderRadius: BorderRadius.circular(20)), child: Text('$count', style: const TextStyle(fontWeight: FontWeight.w800))),
-        const SizedBox(width: 4), const Icon(Icons.chevron_left),
+        const SizedBox(width: 4), Icon(LocaleController.instance.isEnglish ? Icons.chevron_right : Icons.chevron_left),
       ]),),
     ),
   );
