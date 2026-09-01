@@ -24,9 +24,10 @@ class SupabaseStorageService {
     try {
       debugPrint('[PROFILE PHOTO] upload: $path (${bytes.length} bytes)');
 
-      // Do not use upsert=true here. The Supabase project authenticates app
-      // users with Firebase, not Supabase Auth, and upsert may require UPDATE
-      // privileges. First upload is a pure INSERT.
+      // Firebase Auth is the app authentication system. Supabase is used only
+      // as public storage, so the upload must not depend on Supabase Auth.
+      // upsert=true caused a 403 in this project because it can require an
+      // UPDATE operation. Start with a plain INSERT instead.
       await _client.storage.from(bucket).uploadBinary(
             path,
             bytes,
@@ -36,26 +37,57 @@ class SupabaseStorageService {
               cacheControl: '3600',
             ),
           );
-
-      final publicUrl = _client.storage.from(bucket).getPublicUrl(path);
-      final versionedUrl = '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
-
-      debugPrint('[PROFILE PHOTO] upload success: $publicUrl');
-      return versionedUrl;
     } on StorageException catch (e, stackTrace) {
-      debugPrint('[PROFILE PHOTO] STORAGE ERROR');
-      debugPrint('[PROFILE PHOTO] statusCode=${e.statusCode}');
-      debugPrint('[PROFILE PHOTO] message=${e.message}');
-      debugPrintStack(stackTrace: stackTrace);
-      rethrow;
+      // If this nurse already has a photo, INSERT correctly reports that the
+      // object exists. In that case use an explicit UPDATE; this keeps the
+      // request predictable and avoids upsert's combined INSERT/UPDATE path.
+      final message = e.message.toLowerCase();
+      final alreadyExists =
+          message.contains('already exists') ||
+          message.contains('duplicate') ||
+          message.contains('exists');
+
+      if (!alreadyExists) {
+        debugPrint('[PROFILE PHOTO] STORAGE ERROR');
+        debugPrint('[PROFILE PHOTO] statusCode=${e.statusCode}');
+        debugPrint('[PROFILE PHOTO] message=${e.message}');
+        debugPrintStack(stackTrace: stackTrace);
+        rethrow;
+      }
+
+      debugPrint('[PROFILE PHOTO] existing file detected; updating $path');
+
+      try {
+        await _client.storage.from(bucket).updateBinary(
+              path,
+              bytes,
+              fileOptions: FileOptions(
+                contentType: contentType,
+                cacheControl: '3600',
+              ),
+            );
+      } on StorageException catch (updateError, updateStack) {
+        debugPrint('[PROFILE PHOTO] UPDATE STORAGE ERROR');
+        debugPrint('[PROFILE PHOTO] statusCode=${updateError.statusCode}');
+        debugPrint('[PROFILE PHOTO] message=${updateError.message}');
+        debugPrintStack(stackTrace: updateStack);
+        rethrow;
+      }
     }
+
+    final publicUrl = _client.storage.from(bucket).getPublicUrl(path);
+    final versionedUrl = '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
+
+    debugPrint('[PROFILE PHOTO] upload/update success: $publicUrl');
+    return versionedUrl;
   }
 
   Future<void> deleteNurseProfilePhoto(String uid) async {
     final cleanUid = uid.trim();
     if (cleanUid.isEmpty) return;
 
-    final path = 'profile/$cleanUid.jpg';
-    await _client.storage.from(bucket).remove([path]);
+    await _client.storage.from(bucket).remove([
+      'profile/$cleanUid.jpg',
+    ]);
   }
 }
