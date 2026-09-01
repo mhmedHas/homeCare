@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../services/user_service.dart';
 import '../../shared/models/app_user.dart';
 
 class NurseResultsScreen extends StatefulWidget {
@@ -17,7 +16,7 @@ class _NurseResultsScreenState extends State<NurseResultsScreen> {
   List<AppUser> _nurses = [];
   bool _isLoading = true;
   String? _errorMessage;
-  String _sortBy = 'rating'; // rating, price, experience
+  String _sortBy = 'rating';
 
   @override
   void initState() {
@@ -26,10 +25,13 @@ class _NurseResultsScreenState extends State<NurseResultsScreen> {
   }
 
   Future<void> _loadNurses() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
+
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('users')
@@ -38,25 +40,21 @@ class _NurseResultsScreenState extends State<NurseResultsScreen> {
           .where('isVerified', isEqualTo: true)
           .get();
 
-      final nurses =
-          snapshot.docs.map((doc) => AppUser.fromFirestore(doc)).toList();
-      setState(() {
-        _nurses = nurses;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'حدث خطأ في تحميل الممرضين';
-      });
+      final nurses = snapshot.docs
+          .map((doc) => AppUser.fromFirestore(doc))
+          .toList();
+
+      if (!mounted) return;
+      setState(() => _nurses = nurses);
+    } catch (_) {
+      if (mounted) setState(() => _errorMessage = 'حدث خطأ في تحميل الممرضين');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   List<AppUser> get _sortedNurses {
     final list = List<AppUser>.from(_nurses);
-    // For MVP, just sort by name, later we add rating/price from sub-collections
     list.sort((a, b) => a.name.compareTo(b.name));
     return list;
   }
@@ -72,8 +70,7 @@ class _NurseResultsScreenState extends State<NurseResultsScreen> {
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'rating', child: Text('أعلى تقييم')),
               const PopupMenuItem(value: 'price', child: Text('أقل سعر')),
-              const PopupMenuItem(
-                  value: 'experience', child: Text('الأكثر خبرة')),
+              const PopupMenuItem(value: 'experience', child: Text('الأكثر خبرة')),
             ],
           ),
         ],
@@ -83,15 +80,14 @@ class _NurseResultsScreenState extends State<NurseResultsScreen> {
           : _errorMessage != null
               ? Center(
                   child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                      Text(_errorMessage!,
-                          style: const TextStyle(color: AppColors.error)),
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(_errorMessage!, style: const TextStyle(color: AppColors.error)),
                       const SizedBox(height: 16),
-                      ElevatedButton(
-                          onPressed: _loadNurses,
-                          child: const Text('إعادة المحاولة')),
-                    ]))
+                      ElevatedButton(onPressed: _loadNurses, child: const Text('إعادة المحاولة')),
+                    ],
+                  ),
+                )
               : _nurses.isEmpty
                   ? const Center(child: Text('لا يوجد ممرضين متاحين حالياً'))
                   : ListView.builder(
@@ -99,33 +95,71 @@ class _NurseResultsScreenState extends State<NurseResultsScreen> {
                       itemCount: _sortedNurses.length,
                       itemBuilder: (context, index) {
                         final nurse = _sortedNurses[index];
+                        final photoUrl = nurse.photoUrl?.trim() ?? '';
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 6),
                           child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: AppColors.primary,
-                              child: Text(
-                                  nurse.name.isNotEmpty ? nurse.name[0] : '?'),
+                            leading: _NurseAvatar(
+                              photoUrl: photoUrl,
+                              name: nurse.name,
+                              radius: 28,
                             ),
                             title: Row(
                               children: [
-                                Text(nurse.name),
+                                Flexible(
+                                  child: Text(
+                                    nurse.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                                 const SizedBox(width: 8),
                                 if (nurse.isVerified)
-                                  const Icon(Icons.verified,
-                                      color: AppColors.success, size: 16),
+                                  const Icon(Icons.verified, color: AppColors.success, size: 16),
                               ],
                             ),
                             subtitle: Text('${nurse.phone} | ${nurse.role}'),
                             trailing: const Icon(Icons.arrow_forward_ios),
-                            onTap: () {
-                              context.go(
-                                  '/client/nurse-profile/${nurse.uid}?requestId=${widget.requestId}');
-                            },
+                            onTap: () => context.go(
+                              '/client/nurse-profile/${nurse.uid}?requestId=${widget.requestId}',
+                            ),
                           ),
                         );
                       },
                     ),
+    );
+  }
+}
+
+class _NurseAvatar extends StatelessWidget {
+  final String photoUrl;
+  final String name;
+  final double radius;
+
+  const _NurseAvatar({
+    required this.photoUrl,
+    required this.name,
+    required this.radius,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPhoto = photoUrl.isNotEmpty;
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: AppColors.primaryLight,
+      backgroundImage: hasPhoto ? NetworkImage(photoUrl) : null,
+      onBackgroundImageError: hasPhoto ? (_, __) {} : null,
+      child: hasPhoto
+          ? null
+          : Text(
+              name.trim().isNotEmpty ? name.trim()[0] : '?',
+              style: TextStyle(
+                color: AppColors.primary,
+                fontWeight: FontWeight.bold,
+                fontSize: radius * .65,
+              ),
+            ),
     );
   }
 }
