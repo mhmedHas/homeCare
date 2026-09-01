@@ -15,29 +15,24 @@ class SupabaseStorageService {
     required Uint8List bytes,
     String contentType = 'image/jpeg',
   }) async {
-    if (uid.trim().isEmpty) {
-      throw ArgumentError('uid cannot be empty');
-    }
-    if (bytes.isEmpty) {
-      throw ArgumentError('image bytes cannot be empty');
-    }
+    final cleanUid = uid.trim();
+    if (cleanUid.isEmpty) throw ArgumentError('uid cannot be empty');
+    if (bytes.isEmpty) throw ArgumentError('image bytes cannot be empty');
 
-    final path = 'profile/${uid.trim()}.jpg';
+    final path = 'profile/$cleanUid.jpg';
 
     try {
-      debugPrint('[PROFILE PHOTO] Upload started');
-      debugPrint('[PROFILE PHOTO] bucket=$bucket');
-      debugPrint('[PROFILE PHOTO] path=$path');
-      debugPrint('[PROFILE PHOTO] bytes=${bytes.length}');
-      debugPrint('[PROFILE PHOTO] contentType=$contentType');
-      debugPrint('[PROFILE PHOTO] supabaseAuthUser=${_client.auth.currentUser?.id ?? 'none'}');
+      debugPrint('[PROFILE PHOTO] upload: $path (${bytes.length} bytes)');
 
+      // Do not use upsert=true here. The Supabase project authenticates app
+      // users with Firebase, not Supabase Auth, and upsert may require UPDATE
+      // privileges. First upload is a pure INSERT.
       await _client.storage.from(bucket).uploadBinary(
             path,
             bytes,
             fileOptions: FileOptions(
-              contentType: 'image/jpeg',
-              upsert: true,
+              contentType: contentType,
+              upsert: false,
               cacheControl: '3600',
             ),
           );
@@ -45,37 +40,22 @@ class SupabaseStorageService {
       final publicUrl = _client.storage.from(bucket).getPublicUrl(path);
       final versionedUrl = '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
 
-      debugPrint('[PROFILE PHOTO] Upload successful');
-      debugPrint('[PROFILE PHOTO] publicUrl=$publicUrl');
-
+      debugPrint('[PROFILE PHOTO] upload success: $publicUrl');
       return versionedUrl;
     } on StorageException catch (e, stackTrace) {
       debugPrint('[PROFILE PHOTO] STORAGE ERROR');
       debugPrint('[PROFILE PHOTO] statusCode=${e.statusCode}');
       debugPrint('[PROFILE PHOTO] message=${e.message}');
-      debugPrint('[PROFILE PHOTO] error=$e');
-      debugPrintStack(stackTrace: stackTrace);
-      rethrow;
-    } catch (e, stackTrace) {
-      debugPrint('[PROFILE PHOTO] UNKNOWN ERROR: $e');
       debugPrintStack(stackTrace: stackTrace);
       rethrow;
     }
   }
 
   Future<void> deleteNurseProfilePhoto(String uid) async {
-    final path = 'profile/${uid.trim()}.jpg';
+    final cleanUid = uid.trim();
+    if (cleanUid.isEmpty) return;
 
-    try {
-      debugPrint('[PROFILE PHOTO] Delete started: $path');
-      await _client.storage.from(bucket).remove([path]);
-      debugPrint('[PROFILE PHOTO] Delete successful');
-    } on StorageException catch (e, stackTrace) {
-      debugPrint('[PROFILE PHOTO] DELETE STORAGE ERROR');
-      debugPrint('[PROFILE PHOTO] statusCode=${e.statusCode}');
-      debugPrint('[PROFILE PHOTO] message=${e.message}');
-      debugPrintStack(stackTrace: stackTrace);
-      rethrow;
-    }
+    final path = 'profile/$cleanUid.jpg';
+    await _client.storage.from(bucket).remove([path]);
   }
 }
