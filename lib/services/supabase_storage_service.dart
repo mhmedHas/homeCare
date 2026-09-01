@@ -2,8 +2,8 @@ import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Handles public profile photos (nurses and clients) only.
-/// Private identity documents must continue to use the existing private storage flow.
+/// Handles the only public profile image in the app: the nurse profile photo.
+/// Client profile photos are intentionally not supported.
 class SupabaseStorageService {
   static const String bucket = 'nurse-profile-images';
 
@@ -14,44 +14,34 @@ class SupabaseStorageService {
     required Uint8List bytes,
     String contentType = 'image/jpeg',
   }) async {
-    return _uploadProfilePhoto(folder: 'profile', uid: uid, bytes: bytes, contentType: contentType);
-  }
+    if (uid.trim().isEmpty) {
+      throw ArgumentError('uid cannot be empty');
+    }
+    if (bytes.isEmpty) {
+      throw ArgumentError('image bytes cannot be empty');
+    }
 
-  Future<void> deleteNurseProfilePhoto(String uid) async {
-    await _client.storage.from(bucket).remove([
-      'profile/$uid.jpg',
-    ]);
-  }
-
-  /// Same storage flow as [uploadNurseProfilePhoto], for client profile photos.
-  /// Uses a separate folder within the same public bucket so client and
-  /// nurse photos never collide.
-  Future<String> uploadClientProfilePhoto({
-    required String uid,
-    required Uint8List bytes,
-    String contentType = 'image/jpeg',
-  }) async {
-    return _uploadProfilePhoto(folder: 'client-profile', uid: uid, bytes: bytes, contentType: contentType);
-  }
-
-  Future<String> _uploadProfilePhoto({
-    required String folder,
-    required String uid,
-    required Uint8List bytes,
-    required String contentType,
-  }) async {
-    final path = '$folder/$uid.jpg';
+    final path = 'profile/${uid.trim()}.jpg';
 
     await _client.storage.from(bucket).uploadBinary(
           path,
           bytes,
           fileOptions: FileOptions(
-            contentType: contentType,
+            contentType: 'image/jpeg',
             upsert: true,
             cacheControl: '3600',
           ),
         );
 
-    return _client.storage.from(bucket).getPublicUrl(path);
+    // The file path is stable, so append a version to prevent an old
+    // browser/device cache from showing the previous profile photo.
+    final publicUrl = _client.storage.from(bucket).getPublicUrl(path);
+    return '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  Future<void> deleteNurseProfilePhoto(String uid) async {
+    await _client.storage.from(bucket).remove([
+      'profile/${uid.trim()}.jpg',
+    ]);
   }
 }
