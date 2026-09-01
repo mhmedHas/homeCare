@@ -41,7 +41,6 @@ import '../../features/nurse/presentation/nurse_profile.dart' as nurse_profile;
 import '../../features/nurse/presentation/nurse_settings.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
-import '../../services/shared_preferences_service.dart';
 
 class AuthStateNotifier extends ChangeNotifier {
   AuthStateNotifier() {
@@ -108,20 +107,23 @@ final GoRouter appRouter = GoRouter(
 );
 
 Future<String?> _redirectLogic(BuildContext context, GoRouterState state) async {
-  final prefs = SharedPreferencesService();
   final auth = AuthService();
   final currentPath = state.uri.path;
   final user = auth.currentUser;
 
   if (user == null) {
-    final onboardingCompleted = prefs.isOnboardingCompleted();
-    if (!onboardingCompleted && currentPath != '/onboarding' && currentPath != '/splash') return '/onboarding';
-    const publicPaths = {'/login', '/register', '/role', '/splash', '/onboarding'};
+    // New authentication flow: Splash -> Login -> Role -> Register.
+    // Onboarding is intentionally skipped.
+    if (currentPath == '/onboarding') return '/login';
+
+    const publicPaths = {'/login', '/register', '/role', '/splash'};
     return publicPaths.contains(currentPath) ? null : '/login';
   }
 
   final appUser = await UserService().getUser(user.uid);
-  if (appUser == null) return (currentPath == '/role' || currentPath == '/register') ? null : '/role';
+  if (appUser == null) {
+    return (currentPath == '/role' || currentPath == '/register') ? null : '/role';
+  }
 
   final role = appUser.role;
   const authPaths = {'/login', '/register', '/role', '/splash', '/onboarding'};
