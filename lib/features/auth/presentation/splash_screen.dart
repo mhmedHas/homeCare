@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/user_service.dart';
-import '../../../services/shared_preferences_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -28,43 +27,37 @@ class _SplashScreenState extends State<SplashScreen> {
       setState(() => _status = 'جاري تهيئة التطبيق...');
 
       final auth = AuthService();
-      final prefs = SharedPreferencesService();
-
-      // Check if user is logged in
       final user = auth.currentUser;
 
       if (user == null) {
-        // Not logged in -> check onboarding
-        if (prefs.isOnboardingCompleted()) {
-          context.go('/login');
-        } else {
-          context.go('/onboarding');
-        }
+        // No authenticated user: always start the authentication flow at Login.
+        if (mounted) context.go('/login');
         return;
       }
 
-      // User logged in -> check Firestore profile
+      // Authenticated user: load the Firestore profile and continue to the
+      // correct home screen based on the saved role.
       setState(() => _status = 'جاري تحميل بيانات الحساب...');
-      final userService = UserService();
-      final appUser = await userService.getUser(user.uid);
+      final appUser = await UserService().getUser(user.uid);
+
+      if (!mounted) return;
 
       if (appUser == null) {
-        // User exists in Auth but not in Firestore -> go to role selection
+        // Auth account exists, but the application profile is incomplete.
         context.go('/role');
         return;
       }
 
-      // Determine navigation based on role
       if (appUser.role == 'client') {
         context.go('/client/home');
       } else if (appUser.role == 'nurse') {
         context.go('/nurse/home');
       } else {
-        // Invalid role -> logout and go to login
         await auth.logout();
-        context.go('/login');
+        if (mounted) context.go('/login');
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _hasError = true;
         _errorMessage = 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.';
@@ -83,7 +76,6 @@ class _SplashScreenState extends State<SplashScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo placeholder
                 Container(
                   width: 120,
                   height: 120,
@@ -91,8 +83,11 @@ class _SplashScreenState extends State<SplashScreen> {
                     color: Colors.white.withOpacity(0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.health_and_safety,
-                      size: 60, color: Colors.white),
+                  child: const Icon(
+                    Icons.health_and_safety,
+                    size: 60,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 const Text(
@@ -111,9 +106,11 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
                 const SizedBox(height: 40),
                 if (_hasError) ...[
-                  Text(_errorMessage,
-                      style: const TextStyle(color: Colors.white),
-                      textAlign: TextAlign.center),
+                  Text(
+                    _errorMessage,
+                    style: const TextStyle(color: Colors.white),
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () {
@@ -124,14 +121,18 @@ class _SplashScreenState extends State<SplashScreen> {
                       _initializeApp();
                     },
                     style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: AppColors.primary),
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.primary,
+                    ),
                     child: const Text('إعادة المحاولة'),
                   ),
                 ] else ...[
                   const CircularProgressIndicator(color: Colors.white),
                   const SizedBox(height: 16),
-                  Text(_status, style: const TextStyle(color: Colors.white70)),
+                  Text(
+                    _status,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
                 ],
               ],
             ),
