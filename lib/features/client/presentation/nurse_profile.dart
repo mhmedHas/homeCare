@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../services/user_service.dart';
@@ -37,10 +36,7 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
       if (nurse == null || nurse.role != 'nurse') throw StateError('not_nurse');
       final profileDoc = await db.collection('nurseProfiles').doc(widget.nurseId).get();
       final reviewsSnap = await db.collection('reviews').where('nurseId', isEqualTo: widget.nurseId).limit(20).get();
-      final reviews = reviewsSnap.docs.map((doc) {
-        final data = doc.data();
-        return <String, dynamic>{...data, '_id': doc.id};
-      }).toList();
+      final reviews = reviewsSnap.docs.map((doc) => <String, dynamic>{...doc.data(), '_id': doc.id}).toList();
       reviews.sort((a, b) {
         final aDate = (a['createdAt'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0);
         final bDate = (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -62,89 +58,71 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('ملف الممرض')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null || _nurse == null
-              ? _errorState()
-              : _buildProfile(),
+      body: _loading ? const Center(child: CircularProgressIndicator()) : _error != null || _nurse == null ? _errorState() : _buildProfile(),
     );
   }
 
   Widget _errorState() => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.person_off_outlined, size: 56),
-            const SizedBox(height: 12),
-            Text(_error ?? 'الممرض غير موجود', textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            FilledButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة')),
-          ]),
-        ),
-      );
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.person_off_outlined, size: 56),
+        const SizedBox(height: 12),
+        Text(_error ?? 'الممرض غير موجود', textAlign: TextAlign.center),
+        const SizedBox(height: 16),
+        FilledButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة')),
+      ]),
+    ),
+  );
 
   Widget _buildProfile() {
-    final services = _profile['services'] is List
-        ? (_profile['services'] as List).map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList()
-        : <String>[];
-    final areas = _profile['preferredGovernorates'] is List
-        ? (_profile['preferredGovernorates'] as List).map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList()
-        : <String>[];
+    final services = _profile['services'] is List ? (_profile['services'] as List).map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList() : <String>[];
+    final areas = _profile['preferredGovernorates'] is List ? (_profile['preferredGovernorates'] as List).map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList() : <String>[];
     final experience = _profile['experienceYears']?.toString() ?? 'غير محدد';
     final specialization = _profile['specialization']?.toString() ?? 'تمريض';
     final verified = _nurse!.isVerified;
     final average = (_profile['averageRating'] as num?)?.toDouble() ?? 0;
     final total = (_profile['totalReviews'] as num?)?.toInt() ?? 0;
     final distribution = Map<String, dynamic>.from((_profile['ratingDistribution'] as Map?)?.map((k, v) => MapEntry(k.toString(), v)) ?? {});
-    final photoUrl = (_profile['photoUrl']?.toString().trim().isNotEmpty == true)
-        ? _profile['photoUrl'].toString().trim()
-        : (_nurse!.photoUrl?.trim() ?? '');
+    final profilePhoto = _profile['photoUrl']?.toString().trim() ?? '';
+    final userPhoto = _nurse!.photoUrl?.trim() ?? '';
+    final photoUrl = profilePhoto.isNotEmpty ? profilePhoto : userPhoto;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(children: [
-              _NurseProfileAvatar(url: photoUrl, name: _nurse!.name),
-              const SizedBox(height: 12),
-              Text(_nurse!.name, style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
-              if (verified) ...[
-                const SizedBox(height: 6),
-                const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(Icons.verified, color: AppColors.success, size: 19),
-                  SizedBox(width: 5),
-                  Text('ممرض موثق', style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w700)),
-                ]),
-              ],
-              const SizedBox(height: 16),
-              Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, children: [
-                _stat(Icons.medical_services_outlined, specialization),
-                _stat(Icons.workspace_premium_outlined, '$experience سنوات خبرة'),
-              ]),
+        Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(children: [
+          _NurseProfileAvatar(url: photoUrl, name: _nurse!.name),
+          const SizedBox(height: 12),
+          Text(_nurse!.name, style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
+          if (verified) ...[
+            const SizedBox(height: 6),
+            const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.verified, color: AppColors.success, size: 19),
+              SizedBox(width: 5),
+              Text('ممرض موثق', style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w700)),
             ]),
-          ),
-        ),
+          ],
+          const SizedBox(height: 16),
+          Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, children: [
+            _stat(Icons.medical_services_outlined, specialization),
+            _stat(Icons.workspace_premium_outlined, '$experience سنوات خبرة'),
+          ]),
+        ]))),
         const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(children: [
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Text(average > 0 ? average.toStringAsFixed(1) : '—', style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w800)),
-                const SizedBox(width: 10),
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: List.generate(5, (i) => Icon(i < average.round() ? Icons.star : Icons.star_border, color: AppColors.primary, size: 22))),
-                  const SizedBox(height: 3),
-                  Text('$total تقييم', style: const TextStyle(color: AppColors.textSecondary)),
-                ]),
-              ]),
-              const SizedBox(height: 16),
-              for (var stars = 5; stars >= 1; stars--) _ratingRow(stars, (distribution['$stars'] as num?)?.toInt() ?? 0, total),
+        Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(children: [
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(average > 0 ? average.toStringAsFixed(1) : '—', style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w800)),
+            const SizedBox(width: 10),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: List.generate(5, (i) => Icon(i < average.round() ? Icons.star : Icons.star_border, color: AppColors.primary, size: 22))),
+              const SizedBox(height: 3),
+              Text('$total تقييم', style: const TextStyle(color: AppColors.textSecondary)),
             ]),
-          ),
-        ),
+          ]),
+          const SizedBox(height: 16),
+          for (var stars = 5; stars >= 1; stars--) _ratingRow(stars, (distribution['$stars'] as num?)?.toInt() ?? 0, total),
+        ]))),
         const SizedBox(height: 12),
         if (areas.isNotEmpty) _section('محافظات العمل', Icons.location_on_outlined, Wrap(spacing: 8, runSpacing: 8, children: areas.map((area) => Chip(label: Text(area))).toList())),
         if (services.isNotEmpty) ...[
@@ -154,14 +132,11 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         const SizedBox(height: 12),
         _reviewsSection(),
         const SizedBox(height: 18),
-        SizedBox(
-          height: 52,
-          child: FilledButton.icon(
-            onPressed: widget.requestId.isEmpty ? null : () => context.go('/client/request-offers/${widget.requestId}'),
-            icon: const Icon(Icons.check_circle_outline),
-            label: const Text('العودة لعروض الطلب واختيار الممرض'),
-          ),
-        ),
+        SizedBox(height: 52, child: FilledButton.icon(
+          onPressed: widget.requestId.isEmpty ? null : () => context.go('/client/request-offers/${widget.requestId}'),
+          icon: const Icon(Icons.check_circle_outline),
+          label: const Text('العودة لعروض الطلب واختيار الممرض'),
+        )),
       ],
     );
   }
@@ -209,18 +184,18 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
   }
 
   Widget _stat(IconData icon, String text) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.07), borderRadius: BorderRadius.circular(12)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 18, color: AppColors.primary), const SizedBox(width: 6), Text(text)]),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+    decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.07), borderRadius: BorderRadius.circular(12)),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 18, color: AppColors.primary), const SizedBox(width: 6), Text(text)]),
+  );
 
   Widget _section(String title, IconData icon, Widget content) => Card(
-        child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [Icon(icon, color: AppColors.primary), const SizedBox(width: 8), Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold))]),
-          const SizedBox(height: 12),
-          content,
-        ])),
-      );
+    child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [Icon(icon, color: AppColors.primary), const SizedBox(width: 8), Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold))]),
+      const SizedBox(height: 12),
+      content,
+    ])),
+  );
 }
 
 class _NurseProfileAvatar extends StatelessWidget {
@@ -233,13 +208,8 @@ class _NurseProfileAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final fallback = name.trim().isNotEmpty ? name.trim()[0] : '?';
     if (url.isEmpty) {
-      return CircleAvatar(
-        radius: 52,
-        backgroundColor: AppColors.primaryLight,
-        child: Text(fallback, style: const TextStyle(fontSize: 38, color: AppColors.primary, fontWeight: FontWeight.bold)),
-      );
+      return CircleAvatar(radius: 52, backgroundColor: AppColors.primaryLight, child: Text(fallback, style: const TextStyle(fontSize: 38, color: AppColors.primary, fontWeight: FontWeight.bold)));
     }
-
     return ClipOval(
       child: SizedBox(
         width: 104,
