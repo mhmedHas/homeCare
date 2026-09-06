@@ -7,6 +7,7 @@ import '../../../services/auth_service.dart';
 import '../../../services/user_service.dart';
 import '../../../services/shared_preferences_service.dart';
 import '../../../services/supabase_storage_service.dart';
+import '../../../core/utils/support_contact.dart';
 import '../../shared/models/app_user.dart';
 
 class ClientProfileScreen extends StatefulWidget {
@@ -220,6 +221,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       _buildMenuItem(Icons.chat_bubble_outline, 'الرسائل',
                           () => context.push('/client/messages')),
                       _buildMenuItem(Icons.help_outline, 'المساعدة', _showHelp),
+                      _buildMenuItem(Icons.support_agent, 'الدعم الفني والشكاوى',
+                          () => openSupportWhatsApp(context)),
                       const SizedBox(height: 8),
                       _buildMenuItem(Icons.logout, 'تسجيل الخروج', _logout,
                           isDestructive: true),
