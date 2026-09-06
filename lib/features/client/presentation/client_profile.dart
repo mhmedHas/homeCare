@@ -58,50 +58,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     }
   }
 
-  Future<void> _pickAndUploadPhoto() async {
-    if (_isUploadingPhoto || _user == null) return;
-    try {
-      final source = await showModalBottomSheet<ImageSource>(
-        context: context,
-        builder: (context) => SafeArea(
-          child: Wrap(children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt_outlined),
-              title: const Text('التقاط صورة'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('اختيار من المعرض'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-          ]),
-        ),
-      );
-      if (source == null) return;
-
-      final image = await _picker.pickImage(source: source, imageQuality: 85, maxWidth: 1200, maxHeight: 1200);
-      if (image == null) return;
-      final Uint8List bytes = await image.readAsBytes();
-      if (bytes.isEmpty) return;
-
-      setState(() => _isUploadingPhoto = true);
-      final url = await _storage.uploadClientProfilePhoto(uid: _user!.uid, bytes: bytes);
-      await UserService().updateUser(_user!.uid, {'photoUrl': url});
-      if (!mounted) return;
-      setState(() => _user = _user!.copyWith(photoUrl: url));
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث الصورة الشخصية')));
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذر رفع الصورة، حاول مرة أخرى')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isUploadingPhoto = false);
-    }
-  }
-
   Future<void> _editInfo() async {
     if (_user == null) return;
     final nameController = TextEditingController(text: _user!.name);
@@ -126,8 +82,12 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('حفظ')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('إلغاء')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('حفظ')),
         ],
       ),
     );
@@ -138,13 +98,16 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     if (newName.isEmpty || newPhone.isEmpty) return;
 
     try {
-      await UserService().updateUser(_user!.uid, {'name': newName, 'phone': newPhone});
+      await UserService()
+          .updateUser(_user!.uid, {'name': newName, 'phone': newPhone});
       if (!mounted) return;
       setState(() => _user = _user!.copyWith(name: newName, phone: newPhone));
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث البيانات')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('تم تحديث البيانات')));
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر حفظ البيانات، حاول مرة أخرى')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تعذر حفظ البيانات، حاول مرة أخرى')));
       }
     }
   }
@@ -154,8 +117,13 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('المساعدة'),
-        content: const Text('لأي استفسار أو مشكلة في الحجز أو الدفع، تواصل معنا عبر البريد الإلكتروني للدعم الفني.'),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('تمام'))],
+        content: const Text(
+            'لأي استفسار أو مشكلة في الحجز أو الدفع، تواصل معنا عبر البريد الإلكتروني للدعم الفني.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('تمام'))
+        ],
       ),
     );
   }
@@ -191,53 +159,78 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                                   CircleAvatar(
                                     radius: 46,
                                     backgroundColor: AppColors.primary,
-                                    backgroundImage: (_user!.photoUrl?.isNotEmpty ?? false)
-                                        ? NetworkImage(_user!.photoUrl!)
-                                        : null,
-                                    child: (_user!.photoUrl?.isNotEmpty ?? false)
-                                        ? null
-                                        : Text(
-                                            _user!.name.isNotEmpty ? _user!.name[0] : '?',
-                                            style: const TextStyle(fontSize: 36, color: Colors.white),
-                                          ),
+                                    backgroundImage:
+                                        (_user!.photoUrl?.isNotEmpty ?? false)
+                                            ? NetworkImage(_user!.photoUrl!)
+                                            : null,
+                                    child:
+                                        (_user!.photoUrl?.isNotEmpty ?? false)
+                                            ? null
+                                            : Text(
+                                                _user!.name.isNotEmpty
+                                                    ? _user!.name[0]
+                                                    : '?',
+                                                style: const TextStyle(
+                                                    fontSize: 36,
+                                                    color: Colors.white),
+                                              ),
                                   ),
                                   Positioned(
                                     bottom: 0,
                                     right: 0,
                                     child: InkWell(
-                                      onTap: _pickAndUploadPhoto,
+                                      onTap: () {},
                                       borderRadius: BorderRadius.circular(20),
                                       child: Container(
                                         padding: const EdgeInsets.all(6),
-                                        decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle),
+                                        decoration: const BoxDecoration(
+                                            color: AppColors.accent,
+                                            shape: BoxShape.circle),
                                         child: _isUploadingPhoto
                                             ? const SizedBox(
-                                                width: 16, height: 16,
-                                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                            : const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+                                                width: 16,
+                                                height: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        color: Colors.white))
+                                            : const Icon(Icons.camera_alt,
+                                                size: 16, color: Colors.white),
                                       ),
                                     ),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 12),
-                              Text(_user!.name, style: Theme.of(context).textTheme.headlineSmall),
+                              Text(_user!.name,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall),
                               const SizedBox(height: 4),
-                              Text(_user!.phone, style: const TextStyle(color: AppColors.textSecondary)),
+                              Text(_user!.phone,
+                                  style: const TextStyle(
+                                      color: AppColors.textSecondary)),
                               if ((_user!.email ?? '').isNotEmpty)
-                                Text(_user!.email!, style: const TextStyle(color: AppColors.textSecondary)),
+                                Text(_user!.email!,
+                                    style: const TextStyle(
+                                        color: AppColors.textSecondary)),
                             ],
                           ),
                         ),
                       ),
                       const SizedBox(height: 16),
-                      _buildMenuItem(Icons.edit_outlined, 'تعديل البيانات', _editInfo),
-                      _buildMenuItem(Icons.history, 'حجوزاتي', () => context.push('/client/my-bookings')),
-                      _buildMenuItem(Icons.list_alt_outlined, 'طلباتي', () => context.push('/client/my-requests')),
-                      _buildMenuItem(Icons.chat_bubble_outline, 'الرسائل', () => context.push('/client/messages')),
+                      _buildMenuItem(
+                          Icons.edit_outlined, 'تعديل البيانات', _editInfo),
+                      _buildMenuItem(Icons.history, 'حجوزاتي',
+                          () => context.push('/client/my-bookings')),
+                      _buildMenuItem(Icons.list_alt_outlined, 'طلباتي',
+                          () => context.push('/client/my-requests')),
+                      _buildMenuItem(Icons.chat_bubble_outline, 'الرسائل',
+                          () => context.push('/client/messages')),
                       _buildMenuItem(Icons.help_outline, 'المساعدة', _showHelp),
                       const SizedBox(height: 8),
-                      _buildMenuItem(Icons.logout, 'تسجيل الخروج', _logout, isDestructive: true),
+                      _buildMenuItem(Icons.logout, 'تسجيل الخروج', _logout,
+                          isDestructive: true),
                     ],
                   ),
                 ),
@@ -252,7 +245,9 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         leading: Icon(icon,
             color: isDestructive ? AppColors.error : AppColors.primary),
         title: Text(title,
-            style: TextStyle(color: isDestructive ? AppColors.error : null, fontWeight: FontWeight.w500)),
+            style: TextStyle(
+                color: isDestructive ? AppColors.error : null,
+                fontWeight: FontWeight.w500)),
         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
         onTap: onTap,
       ),
