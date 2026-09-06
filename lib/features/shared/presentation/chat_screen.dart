@@ -434,12 +434,25 @@ class _MessageBubble extends StatelessWidget {
               style: TextStyle(color: isMe ? Colors.white : AppColors.textPrimary, fontSize: 15),
             ),
             const SizedBox(height: 4),
-            Text(
-              time,
-              style: TextStyle(
-                fontSize: 10,
-                color: isMe ? Colors.white70 : AppColors.textSecondary,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  time,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isMe ? Colors.white70 : AppColors.textSecondary,
+                  ),
+                ),
+                if (isMe) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    message.seen ? Icons.done_all : Icons.done,
+                    size: 14,
+                    color: Colors.white70,
+                  ),
+                ],
+              ],
             ),
           ],
         ),
