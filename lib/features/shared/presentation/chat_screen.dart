@@ -14,6 +14,11 @@ import '../models/message.dart';
 /// It shows the *other* participant's real name and photo in the app bar
 /// (the client sees the nurse's name, the nurse sees the client's name),
 /// instead of a generic "Conversation" title.
+///
+/// Performance note: only a fixed-size recent window of messages is kept
+/// live (see [ChatService.getRecentMessages]); older history is fetched
+/// on demand via "تحميل رسائل أقدم" so a conversation with a huge history
+/// never has to load, or listen to, everything at once.
 class ChatScreen extends StatefulWidget {
   final String bookingId;
   const ChatScreen({super.key, required this.bookingId});
@@ -33,6 +38,12 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isLoading = true;
   bool _isSending = false;
   String? _errorMessage;
+
+  // Older messages loaded on demand, kept separate from the live recent
+  // window so we never have to re-merge/dedupe against a moving stream.
+  final List<Message> _olderMessages = [];
+  bool _isLoadingOlder = false;
+  bool _hasMoreOlder = true;
 
   @override
   void initState() {
@@ -104,6 +115,30 @@ class _ChatScreenState extends State<ChatScreen> {
           _errorMessage = 'تعذر فتح المحادثة';
         });
       }
+    }
+  }
+
+  Future<void> _loadOlderMessages(DateTime oldestLoaded) async {
+    if (_chatId == null || _isLoadingOlder || !_hasMoreOlder) return;
+    setState(() => _isLoadingOlder = true);
+    try {
+      final page = await _chatService.getOlderMessages(
+        _chatId!,
+        before: oldestLoaded,
+      );
+      if (!mounted) return;
+      setState(() {
+        _olderMessages.addAll(page);
+        _hasMoreOlder = page.length >= kChatMessagePageSize;
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر تحميل رسائل أقدم')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingOlder = false);
     }
   }
 
@@ -181,7 +216,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   children: [
                     Expanded(
                       child: StreamBuilder<List<Message>>(
-                        stream: _chatService.getMessages(_chatId!),
+                        stream: _chatService.getRecentMessages(_chatId!),
                         builder: (context, snapshot) {
                           if (snapshot.connectionState == ConnectionState.waiting &&
                               !snapshot.hasData) {
@@ -190,8 +225,12 @@ class _ChatScreenState extends State<ChatScreen> {
                           if (snapshot.hasError) {
                             return const Center(child: Text('حدث خطأ أثناء تحميل الرسائل'));
                           }
-                          final messages = snapshot.data ?? const <Message>[];
-                          if (messages.isEmpty) {
+                          final recent = snapshot.data ?? const <Message>[];
+                          // Combine the live recent window with any older
+                          // pages the user has pulled in, oldest-loaded last
+                          // for the reversed list below.
+                          final all = [...recent, ..._olderMessages];
+                          if (all.isEmpty) {
                             return Center(
                               child: Padding(
                                 padding: const EdgeInsets.all(24),
@@ -206,18 +245,63 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                             );
                           }
-                          // Newest first for a reversed ListView.
-                          final reversed = messages.reversed.toList(growable: false);
                           final myId = AuthService().currentUser?.uid;
+                          final hasMore = recent.length >= kChatMessagePageSize && _hasMoreOlder;
+
                           return ListView.builder(
                             controller: _scrollController,
                             reverse: true,
                             padding: const EdgeInsets.all(12),
-                            itemCount: reversed.length,
+                            // +1 for the "load older" footer when relevant.
+                            itemCount: all.length + (hasMore || _isLoadingOlder ? 1 : 0),
                             itemBuilder: (context, index) {
-                              final msg = reversed[index];
+                              if (index == all.length) {
+                                // Footer (appears at the visual top, since
+                                // the list is reversed): older-messages control.
+                                if (_isLoadingOlder) {
+                                  return const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 16),
+                                    child: Center(
+                                      child: SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  child: Center(
+                                    child: TextButton.icon(
+                                      onPressed: () =>
+                                          _loadOlderMessages(all.last.createdAt),
+                                      icon: const Icon(Icons.expand_less, size: 18),
+                                      label: const Text('تحميل رسائل أقدم'),
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              final msg = all[index];
                               final isMe = msg.senderId == myId;
-                              return _MessageBubble(message: msg, isMe: isMe);
+                              final showDateHeader = index == all.length - 1 ||
+                                  !_isSameDay(all[index + 1].createdAt, msg.createdAt);
+
+                              final bubble = _MessageBubble(message: msg, isMe: isMe);
+                              if (!showDateHeader) return bubble;
+
+                              // The separator must render ABOVE the bubble:
+                              // in this reversed ListView, higher indices sit
+                              // higher on screen, so within this slot the
+                              // "older" edge (top) is where the day label for
+                              // the messages below it belongs.
+                              return Column(
+                                children: [
+                                  _DateSeparator(date: msg.createdAt),
+                                  bubble,
+                                ],
+                              );
                             },
                           );
                         },
@@ -273,6 +357,46 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
     );
   }
+
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+class _DateSeparator extends StatelessWidget {
+  final DateTime date;
+  const _DateSeparator({required this.date});
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    String label;
+    if (_isSameDay(date, now)) {
+      label = 'اليوم';
+    } else if (_isSameDay(date, now.subtract(const Duration(days: 1)))) {
+      label = 'أمس';
+    } else {
+      label = DateFormat('d MMMM yyyy', 'ar').format(date);
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: .06),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+        ),
+      ),
+    );
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
 class _MessageBubble extends StatelessWidget {
