@@ -37,7 +37,9 @@ function json(data: JsonRecord, status = 200): Response {
 }
 
 function fieldString(doc: FirestoreDocument, name: string): string | null {
-  return doc.fields?.[name]?.stringValue ?? null;
+  const field = doc.fields?.[name];
+  if (!field) return null;
+  return field.stringValue ?? field.integerValue ?? null;
 }
 
 async function verifyFirebaseToken(request: Request): Promise<string> {
@@ -114,7 +116,9 @@ Deno.serve(async (request) => {
   }
 
   try {
-    const firebaseToken = (request.headers.get('Authorization') ?? '').substring('Bearer '.length).trim();
+    const firebaseToken = (request.headers.get('Authorization') ?? '')
+      .substring('Bearer '.length)
+      .trim();
     const callerUid = await verifyFirebaseToken(request);
     const body = await request.json() as JsonRecord;
     const type = body.type?.toString();
