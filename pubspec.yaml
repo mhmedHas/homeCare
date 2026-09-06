@@ -19,8 +19,11 @@ dependencies:
   firebase_storage: ^12.4.3
   firebase_app_check: ^0.3.0+3
 
-  # Supabase - nurse profile photos
+  # Supabase - nurse profile photos + Edge Functions
   supabase_flutter: ^2.17.2
+
+  # OneSignal push notifications
+  onesignal_flutter: ^5.6.8
 
   # Routing & State
   go_router: ^14.8.1
