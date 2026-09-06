@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../features/shared/models/message.dart';
+import 'notification_service.dart';
 
 /// Page size for the live message window in a chat, and for "load older
 /// messages" pagination. Kept small on purpose: a chat can grow to
@@ -70,6 +71,19 @@ class ChatService {
       unreadField: FieldValue.increment(1),
     });
     await batch.commit();
+
+    // The message is already safely stored in Firestore. A notification
+    // failure must never make the chat message appear to have failed.
+    try {
+      await NotificationService.sendChatNotification(
+        chatId: chatId,
+        senderId: senderId,
+        receiverId: receiverId,
+        text: text,
+      );
+    } catch (_) {
+      // Ignore notification failures; Firestore remains the source of truth.
+    }
   }
 
   /// Streams only the most recent [kChatMessagePageSize] messages, newest
