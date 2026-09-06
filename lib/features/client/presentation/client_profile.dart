@@ -175,30 +175,30 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                                                     color: Colors.white),
                                               ),
                                   ),
-                                  Positioned(
-                                    bottom: 0,
-                                    right: 0,
-                                    child: InkWell(
-                                      onTap: () {},
-                                      borderRadius: BorderRadius.circular(20),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(6),
-                                        decoration: const BoxDecoration(
-                                            color: AppColors.accent,
-                                            shape: BoxShape.circle),
-                                        child: _isUploadingPhoto
-                                            ? const SizedBox(
-                                                width: 16,
-                                                height: 16,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                        color: Colors.white))
-                                            : const Icon(Icons.camera_alt,
-                                                size: 16, color: Colors.white),
-                                      ),
-                                    ),
-                                  ),
+                                  // Positioned(
+                                  //   bottom: 0,
+                                  //   right: 0,
+                                  //   child: InkWell(
+                                  //     onTap: () {},
+                                  //     borderRadius: BorderRadius.circular(20),
+                                  //     child: Container(
+                                  //       padding: const EdgeInsets.all(6),
+                                  //       decoration: const BoxDecoration(
+                                  //           color: AppColors.accent,
+                                  //           shape: BoxShape.circle),
+                                  //       child: _isUploadingPhoto
+                                  //           ? const SizedBox(
+                                  //               width: 16,
+                                  //               height: 16,
+                                  //               child:
+                                  //                   CircularProgressIndicator(
+                                  //                       strokeWidth: 2,
+                                  //                       color: Colors.white))
+                                  //           : const Icon(Icons.camera_alt,
+                                  //               size: 16, color: Colors.white),
+                                  //     ),
+                                  //   ),
+                                  // ),
                                 ],
                               ),
                               const SizedBox(height: 12),
@@ -206,6 +206,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                                   style: Theme.of(context)
                                       .textTheme
                                       .headlineSmall),
+                              const SizedBox(height: 4),
                             ],
                           ),
                         ),
