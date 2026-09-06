@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../features/shared/models/care_request.dart';
+import 'notification_service.dart';
 
 class CareRequestService {
   final CollectionReference<Map<String, dynamic>> _requestsCollection =
@@ -9,6 +10,17 @@ class CareRequestService {
     final docRef = _requestsCollection.doc();
     final newRequest = request.copyWith(id: docRef.id);
     await docRef.set(newRequest.toMap());
+
+    // The request is stored first. If OneSignal/Supabase is temporarily
+    // unavailable, the request itself remains successfully created.
+    try {
+      await NotificationService.sendCareRequestNotification(
+        requestId: docRef.id,
+      );
+    } catch (_) {
+      // Ignore notification failures; Firestore remains the source of truth.
+    }
+
     return docRef.id;
   }
 
