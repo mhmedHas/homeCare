@@ -530,13 +530,6 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
                   ],
                 ),
               ),
-            const SizedBox(height: 6),
-            Text(
-              _user!.phone,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-              ),
-            ),
           ],
         ),
       ),

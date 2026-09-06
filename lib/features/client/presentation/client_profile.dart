@@ -206,14 +206,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                                   style: Theme.of(context)
                                       .textTheme
                                       .headlineSmall),
-                              const SizedBox(height: 4),
-                              Text(_user!.phone,
-                                  style: const TextStyle(
-                                      color: AppColors.textSecondary)),
-                              if ((_user!.email ?? '').isNotEmpty)
-                                Text(_user!.email!,
-                                    style: const TextStyle(
-                                        color: AppColors.textSecondary)),
                             ],
                           ),
                         ),
