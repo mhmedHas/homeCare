@@ -53,12 +53,10 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
 
       if (firebaseUser == null) {
         if (!mounted) return;
-
         setState(() {
           _errorMessage = 'يرجى تسجيل الدخول';
           _isLoading = false;
         });
-
         return;
       }
 
@@ -72,11 +70,9 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
 
       final appUser = results[0] as AppUser?;
       final doc = results[1] as DocumentSnapshot<Map<String, dynamic>>;
-
       final profileData = doc.data();
 
       String? photoUrl;
-
       final profilePhoto = profileData?['photoUrl'];
       final userPhoto = appUser?.photoUrl;
 
@@ -96,7 +92,6 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-
       setState(() {
         _errorMessage = 'تعذر تحميل الملف الشخصي';
         _isLoading = false;
@@ -124,16 +119,12 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
                 ListTile(
                   leading: const Icon(Icons.camera_alt_outlined),
                   title: const Text('التقاط صورة'),
-                  onTap: () {
-                    Navigator.pop(context, ImageSource.camera);
-                  },
+                  onTap: () => Navigator.pop(context, ImageSource.camera),
                 ),
                 ListTile(
                   leading: const Icon(Icons.photo_library_outlined),
                   title: const Text('اختيار من المعرض'),
-                  onTap: () {
-                    Navigator.pop(context, ImageSource.gallery);
-                  },
+                  onTap: () => Navigator.pop(context, ImageSource.gallery),
                 ),
               ],
             ),
@@ -153,20 +144,14 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
       if (image == null) return;
 
       final Uint8List bytes = await image.readAsBytes();
-
       if (bytes.isEmpty) {
         _showMessage('الصورة غير صالحة');
         return;
       }
 
-      if (mounted) {
-        setState(() {
-          _isUploadingPhoto = true;
-        });
-      }
+      if (mounted) setState(() => _isUploadingPhoto = true);
 
       final uid = firebaseUser.uid;
-
       final photoUrl = await _storage.uploadNurseProfilePhoto(
         uid: uid,
         bytes: bytes,
@@ -201,32 +186,20 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
       _showMessage('تم تغيير صورة البروفايل بنجاح');
     } catch (e) {
       if (!mounted) return;
-
-      setState(() {
-        _isUploadingPhoto = false;
-      });
-
+      setState(() => _isUploadingPhoto = false);
       _showMessage('حدث خطأ أثناء رفع الصورة، حاول مرة أخرى');
     }
   }
 
   String _contentType(String fileName) {
     final name = fileName.toLowerCase();
-
-    if (name.endsWith('.png')) {
-      return 'image/png';
-    }
-
-    if (name.endsWith('.webp')) {
-      return 'image/webp';
-    }
-
+    if (name.endsWith('.png')) return 'image/png';
+    if (name.endsWith('.webp')) return 'image/webp';
     return 'image/jpeg';
   }
 
   void _showMessage(String message) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -240,27 +213,21 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
   Future<void> _logout() async {
     await AuthService().logout();
     await SharedPreferencesService().clearTempPreferences();
-
     if (!mounted) return;
-
     context.go('/login');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('حسابي'),
-      ),
+      appBar: AppBar(title: const Text('حسابي')),
       body: _buildBody(),
     );
   }
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_errorMessage != null || _user == null) {
@@ -270,10 +237,7 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.error_outline,
-                size: 56,
-              ),
+              const Icon(Icons.error_outline, size: 56),
               const SizedBox(height: 12),
               Text(
                 _errorMessage ?? 'البيانات غير موجودة',
@@ -298,13 +262,10 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         children: [
           _buildProfileHeader(),
           const SizedBox(height: 12),
+          // بيانات التخصص وسنوات الخبرة والخدمات أصبحت داخل إعدادات العمل.
+          // تم إزالة اختصار "الملف المهني" من صفحة حساب الممرض لتجنب تكرار نفس البيانات.
           _buildMenuItem(
-            Icons.edit_outlined,
-            'الملف المهني',
-            () => context.go('/nurse/professional-profile'),
-          ),
-          _buildMenuItem(
-            Icons.location_city,
+            Icons.location_city_outlined,
             'إعدادات العمل والمحافظات',
             () => context.push('/nurse/settings'),
           ),
