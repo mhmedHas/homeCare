@@ -18,6 +18,7 @@ class _RequestDetailsNurseScreenState extends State<RequestDetailsNurseScreen> {
   bool _loading = true;
   bool _sending = false;
   bool _alreadyApplied = false;
+  bool _isVerified = false;
   final _price = TextEditingController();
   final _note = TextEditingController();
 
@@ -34,6 +35,7 @@ class _RequestDetailsNurseScreenState extends State<RequestDetailsNurseScreen> {
       final snap = await db.collection('careRequests').doc(widget.requestId).get();
       if (!snap.exists) throw Exception('missing');
       final request = CareRequest.fromFirestore(snap);
+
       if (uid != null) {
         final offer = await db.collection('careOffers')
             .where('requestId', isEqualTo: widget.requestId)
@@ -41,8 +43,17 @@ class _RequestDetailsNurseScreenState extends State<RequestDetailsNurseScreen> {
             .limit(1)
             .get();
         _alreadyApplied = offer.docs.isNotEmpty;
+
+        final verificationSnap = await db.collection('nurseDocuments').doc(uid).get();
+        _isVerified = verificationSnap.data()?['verificationStatus']?.toString() == 'approved';
       }
-      if (mounted) setState(() { _request = request; _loading = false; });
+
+      if (mounted) {
+        setState(() {
+          _request = request;
+          _loading = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() { _request = null; _loading = false; });
     }
@@ -70,12 +81,17 @@ class _RequestDetailsNurseScreenState extends State<RequestDetailsNurseScreen> {
       final db = FirebaseFirestore.instance;
       final requestRef = db.collection('careRequests').doc(request.id);
       final offerRef = db.collection('careOffers').doc('${request.id}_$uid');
+      final verificationRef = db.collection('nurseDocuments').doc(uid);
       final userSnap = await db.collection('users').doc(uid).get();
       final profileSnap = await db.collection('nurseProfiles').doc(uid).get();
 
       await db.runTransaction((tx) async {
+        final verificationSnap = await tx.get(verificationRef);
         final requestSnap = await tx.get(requestRef);
         final existingOffer = await tx.get(offerRef);
+
+        final verificationStatus = verificationSnap.data()?['verificationStatus']?.toString();
+        if (verificationStatus != 'approved') throw Exception('not_verified');
         if (!requestSnap.exists || requestSnap.data()?['status'] != 'open') throw Exception('closed');
         if (existingOffer.exists) throw Exception('duplicate');
 
@@ -90,7 +106,7 @@ class _RequestDetailsNurseScreenState extends State<RequestDetailsNurseScreen> {
           'nurseRating': (profile['averageRating'] as num?)?.toDouble() ?? 0,
           'nurseExperienceYears': profile['experienceYears'] ?? 0,
           'nurseSpecialization': profile['specialization'] ?? '',
-          'nurseVerified': userData['isVerified'] == true,
+          'nurseVerified': true,
           'governorate': request.governorate,
           'proposedPrice': price,
           'note': _note.text.trim(),
@@ -107,9 +123,18 @@ class _RequestDetailsNurseScreenState extends State<RequestDetailsNurseScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _sending = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().contains('duplicate') ? 'أنت قدمت عرضًا بالفعل على هذا الطلب' : 'تعذر إرسال العرض، حاول مرة أخرى')));
+        final message = e.toString().contains('not_verified')
+            ? 'لا يمكنك التقديم على الطلبات إلا بعد توثيق حسابك'
+            : e.toString().contains('duplicate')
+                ? 'أنت قدمت عرضًا بالفعل على هذا الطلب'
+                : 'تعذر إرسال العرض، حاول مرة أخرى';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
       }
     }
+  }
+
+  void _openVerification() {
+    Navigator.of(context).pushNamed('/nurse/documents').then((_) => _load());
   }
 
   @override
@@ -147,6 +172,23 @@ class _RequestDetailsNurseScreenState extends State<RequestDetailsNurseScreen> {
           const SizedBox(height: 16),
           if (_alreadyApplied)
             Card(color: AppColors.primaryLight, child: const Padding(padding: EdgeInsets.all(18), child: Row(children: [Icon(Icons.check_circle, color: AppColors.primary), SizedBox(width: 10), Expanded(child: Text('قدمت عرضك بالفعل. انتظر اختيار العميل.'))])))
+          else if (r.status == 'open' && !_isVerified)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  children: [
+                    const Icon(Icons.verified_user_outlined, size: 42, color: AppColors.primary),
+                    const SizedBox(height: 10),
+                    const Text('لا يمكنك التقديم على الطلبات إلا بعد توثيق حسابك', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    const Text('يمكنك مشاهدة تفاصيل الطلبات، لكن يجب توثيق حسابك أولاً لإرسال عرض للعميل.', textAlign: TextAlign.center),
+                    const SizedBox(height: 14),
+                    SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: _openVerification, icon: const Icon(Icons.verified_outlined), label: const Text('توثيق الحساب'))),
+                  ],
+                ),
+              ),
+            )
           else if (r.status == 'open') ...[
             Text('قدم عرضك', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 10),
