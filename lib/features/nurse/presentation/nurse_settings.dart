@@ -12,19 +12,73 @@ class NurseSettingsScreen extends StatefulWidget {
 
 class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
   static const governorates = <String>[
-    'القاهرة', 'الجيزة', 'الإسكندرية', 'القليوبية', 'الدقهلية', 'الشرقية',
-    'الغربية', 'المنوفية', 'البحيرة', 'كفر الشيخ', 'دمياط', 'بورسعيد',
-    'الإسماعيلية', 'السويس', 'الفيوم', 'بني سويف', 'المنيا', 'أسيوط',
-    'سوهاج', 'قنا', 'الأقصر', 'أسوان', 'مطروح', 'الوادي الجديد',
-    'شمال سيناء', 'جنوب سيناء', 'البحر الأحمر',
+    'القاهرة',
+    'الجيزة',
+    'الإسكندرية',
+    'القليوبية',
+    'الدقهلية',
+    'الشرقية',
+    'الغربية',
+    'المنوفية',
+    'البحيرة',
+    'كفر الشيخ',
+    'دمياط',
+    'بورسعيد',
+    'الإسماعيلية',
+    'السويس',
+    'الفيوم',
+    'بني سويف',
+    'المنيا',
+    'أسيوط',
+    'سوهاج',
+    'قنا',
+    'الأقصر',
+    'أسوان',
+    'مطروح',
+    'الوادي الجديد',
+    'شمال سيناء',
+    'جنوب سيناء',
+    'البحر الأحمر',
+  ];
+
+  // تخصصات التمريض المتاحة للاختيار من القائمة.
+  static const specializations = <String>[
+    'تمريض عام',
+    'تمريض باطني وجراحي',
+    'تمريض الأطفال',
+    'تمريض النساء والتوليد',
+    'تمريض حديثي الولادة',
+    'العناية المركزة',
+    'الطوارئ والحوادث',
+    'رعاية كبار السن',
+    'الرعاية المنزلية',
+    'تمريض الحالات الحرجة',
+    'تمريض القلب والأوعية الدموية',
+    'تمريض أمراض الكلى والغسيل الكلوي',
+    'تمريض الأورام',
+    'تمريض الأمراض المزمنة',
+    'تمريض الصحة النفسية',
+    'تمريض صحة المجتمع',
+    'تمريض العمليات والجراحة',
+    'تمريض التخدير',
+    'تمريض مكافحة العدوى',
+    'تمريض التأهيل والعلاج الطبيعي',
+    'تمريض الحروق',
+    'تمريض العناية التلطيفية',
+    'تمريض مرضى السكري',
+    'تمريض أمراض الجهاز التنفسي',
+    'تمريض الأمراض العصبية',
+    'تمريض العناية بالقلب',
+    'تمريض الرعاية طويلة الأمد',
+    'أخرى',
   ];
 
   final _firestore = FirebaseFirestore.instance;
-  final _specializationController = TextEditingController();
   final _experienceController = TextEditingController();
   final _servicesController = TextEditingController();
 
   List<String> _selectedGovernorates = [];
+  String? _selectedSpecialization;
   bool _loading = true;
   bool _saving = false;
 
@@ -36,7 +90,6 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
 
   @override
   void dispose() {
-    _specializationController.dispose();
     _experienceController.dispose();
     _servicesController.dispose();
     super.dispose();
@@ -54,12 +107,22 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
       final data = doc.data() ?? {};
       final governoratesValue = data['preferredGovernorates'];
       final servicesValue = data['services'];
+      final savedSpecialization = data['specialization']?.toString().trim();
 
       _selectedGovernorates = governoratesValue is List
-          ? governoratesValue.map((e) => e.toString()).toSet().toList()
+          ? governoratesValue
+              .map((e) => e.toString())
+              .where(governorates.contains)
+              .toSet()
+              .toList()
           : [];
-      _specializationController.text = data['specialization']?.toString() ?? '';
-      _experienceController.text = data['experienceYears']?.toString() ?? '';
+
+      _selectedSpecialization = specializations.contains(savedSpecialization)
+          ? savedSpecialization
+          : null;
+
+      _experienceController.text =
+          data['experienceYears']?.toString() ?? '';
       _servicesController.text = servicesValue is List
           ? servicesValue.map((e) => e.toString()).join('\n')
           : (data['servicesText']?.toString() ?? '');
@@ -74,17 +137,124 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
     }
   }
 
+  Future<void> _selectGovernorates() async {
+    final tempSelected = {..._selectedGovernorates};
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: SizedBox(
+                height: MediaQuery.sizeOf(context).height * 0.82,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'اختيار محافظات العمل',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setSheetState(tempSelected.clear);
+                            },
+                            child: const Text('مسح الكل'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text(
+                          '${tempSelected.length} محافظة محددة',
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: governorates.length,
+                        itemBuilder: (_, index) {
+                          final governorate = governorates[index];
+                          final selected = tempSelected.contains(governorate);
+
+                          return CheckboxListTile(
+                            value: selected,
+                            title: Text(governorate),
+                            secondary: Icon(
+                              Icons.location_on_outlined,
+                              color: selected
+                                  ? AppColors.primary
+                                  : AppColors.textSecondary,
+                            ),
+                            onChanged: (value) {
+                              setSheetState(() {
+                                if (value == true) {
+                                  tempSelected.add(governorate);
+                                } else {
+                                  tempSelected.remove(governorate);
+                                }
+                              });
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: FilledButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedGovernorates = tempSelected.toList();
+                            });
+                            Navigator.pop(sheetContext);
+                          },
+                          child: const Text('تأكيد المحافظات'),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _save() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
     final experience = int.tryParse(_experienceController.text.trim());
+
     if (_selectedGovernorates.isEmpty) {
       _showMessage('اختار محافظة واحدة على الأقل');
       return;
     }
-    if (_specializationController.text.trim().isEmpty) {
-      _showMessage('اكتب التخصص');
+    if (_selectedSpecialization == null) {
+      _showMessage('اختار التخصص');
       return;
     }
     if (experience == null || experience < 0 || experience > 60) {
@@ -97,6 +267,7 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
     }
 
     setState(() => _saving = true);
+
     try {
       final services = _servicesController.text
           .split(RegExp(r'[\n,،]+'))
@@ -105,13 +276,16 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
           .toSet()
           .toList();
 
-      await _firestore.collection('nurseProfiles').doc(uid).set({
-        'preferredGovernorates': _selectedGovernorates,
-        'specialization': _specializationController.text.trim(),
-        'experienceYears': experience,
-        'services': services,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      await _firestore.collection('nurseProfiles').doc(uid).set(
+        {
+          'preferredGovernorates': _selectedGovernorates,
+          'specialization': _selectedSpecialization,
+          'experienceYears': experience,
+          'services': services,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -126,7 +300,18 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  String get _governoratesSummary {
+    if (_selectedGovernorates.isEmpty) return 'لم يتم اختيار محافظة';
+    if (_selectedGovernorates.length == 1) return _selectedGovernorates.first;
+    if (_selectedGovernorates.length == 2) {
+      return _selectedGovernorates.join('، ');
+    }
+    return '${_selectedGovernorates.length} محافظات مختارة';
   }
 
   @override
@@ -139,48 +324,60 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
                 _section(
-                  icon: Icons.location_city_outlined,
+                  icon: Icons.location_on_outlined,
                   title: 'محافظات العمل',
                   subtitle:
-                      'اختار المحافظات التي ترغب في استقبال طلبات Home Care فيها. سيتم فلترة الطلبات بناءً عليها فقط.',
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: governorates.map((governorate) {
-                      final selected = _selectedGovernorates.contains(governorate);
-                      return FilterChip(
-                        label: Text(governorate),
-                        selected: selected,
-                        onSelected: _saving
-                            ? null
-                            : (value) {
-                                setState(() {
-                                  if (value) {
-                                    _selectedGovernorates.add(governorate);
-                                  } else {
-                                    _selectedGovernorates.remove(governorate);
-                                  }
-                                });
-                              },
-                      );
-                    }).toList(),
+                      'حدد المحافظات التي ترغب في استقبال طلبات الرعاية المنزلية فيها.',
+                  child: InkWell(
+                    onTap: _saving ? null : _selectGovernorates,
+                    borderRadius: BorderRadius.circular(12),
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'المحافظات',
+                        prefixIcon: Icon(Icons.map_outlined),
+                        suffixIcon: Icon(Icons.keyboard_arrow_down),
+                      ),
+                      child: Text(
+                        _governoratesSummary,
+                        style: TextStyle(
+                          color: _selectedGovernorates.isEmpty
+                              ? AppColors.textSecondary
+                              : null,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
                 _section(
                   icon: Icons.badge_outlined,
                   title: 'البيانات المهنية',
-                  subtitle: 'هذه البيانات ستظهر للعميل عند مراجعة ملفك.',
+                  subtitle:
+                      'اختار تخصصك من القائمة وحدد خبرتك والخدمات التي تقدمها. هذه البيانات ستظهر للعميل.',
                   child: Column(
                     children: [
-                      TextField(
-                        controller: _specializationController,
-                        textInputAction: TextInputAction.next,
+                      DropdownButtonFormField<String>(
+                        value: _selectedSpecialization,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'التخصص',
-                          hintText: 'مثال: تمريض عام، رعاية كبار السن',
                           prefixIcon: Icon(Icons.medical_services_outlined),
                         ),
+                        items: specializations
+                            .map(
+                              (specialization) => DropdownMenuItem<String>(
+                                value: specialization,
+                                child: Text(specialization),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: _saving
+                            ? null
+                            : (value) {
+                                setState(() {
+                                  _selectedSpecialization = value;
+                                });
+                              },
                       ),
                       const SizedBox(height: 12),
                       TextField(
@@ -271,9 +468,20 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      Text(subtitle, style: const TextStyle(color: AppColors.textSecondary)),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
