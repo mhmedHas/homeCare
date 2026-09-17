@@ -20,9 +20,10 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
   final _storage = SupabaseStorageService();
 
   bool _isLoading = true;
+  bool _isSubmitting = false;
   bool _isUploadingId = false;
   bool _isUploadingLicense = false;
-  String? _errorMessage;
+
   String? _nationalIdUrl;
   String? _licenseUrl;
   String _verificationStatus = 'not_submitted';
@@ -35,12 +36,7 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
   }
 
   Future<void> _loadVerification() async {
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
-    }
+    if (mounted) setState(() => _isLoading = true);
 
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -50,50 +46,73 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
           .collection('nurseDocuments')
           .doc(uid)
           .get();
-      final data = doc.data();
+      final data = doc.data() ?? <String, dynamic>{};
 
       if (!mounted) return;
       setState(() {
-        _nationalIdUrl = data?['nationalIdUrl']?.toString();
-        _licenseUrl = data?['professionalLicenseUrl']?.toString();
+        _nationalIdUrl = data['nationalIdUrl']?.toString();
+        _licenseUrl = data['professionalLicenseUrl']?.toString();
         _verificationStatus =
-            data?['verificationStatus']?.toString() ?? 'not_submitted';
-        _rejectionReason = data?['rejectionReason']?.toString();
+            data['verificationStatus']?.toString() ?? 'not_submitted';
+        _rejectionReason = data['rejectionReason']?.toString();
         _isLoading = false;
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _errorMessage = 'تعذر تحميل بيانات التوثيق';
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
+      _showMessage('تعذر تحميل بيانات التوثيق');
     }
   }
 
-  Future<void> _uploadDocument({required bool nationalId}) async {
-    if (nationalId ? _isUploadingId : _isUploadingLicense) return;
+  bool get _hasId => _nationalIdUrl != null && _nationalIdUrl!.isNotEmpty;
+  bool get _hasLicense => _licenseUrl != null && _licenseUrl!.isNotEmpty;
+  bool get _canSubmit => _hasId && _hasLicense && !_isSubmitting;
+  bool get _locked =>
+      _verificationStatus == 'pending' || _verificationStatus == 'approved';
+
+  Future<void> _pickAndUpload({required bool nationalId}) async {
+    if (_locked || (nationalId ? _isUploadingId : _isUploadingLicense)) return;
 
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) throw StateError('unauthenticated');
 
+      final source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        builder: (context) => SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: const Text('التقاط صورة بالكاميرا'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('اختيار من المعرض'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (source == null) return;
+
       final image = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         imageQuality: 88,
         maxWidth: 1800,
         maxHeight: 1800,
       );
       if (image == null) return;
 
-      if (mounted) {
-        setState(() {
-          if (nationalId) {
-            _isUploadingId = true;
-          } else {
-            _isUploadingLicense = true;
-          }
-        });
-      }
+      setState(() {
+        if (nationalId) {
+          _isUploadingId = true;
+        } else {
+          _isUploadingLicense = true;
+        }
+      });
 
       final Uint8List bytes = await image.readAsBytes();
       final url = await _storage.uploadNurseVerificationDocument(
@@ -103,35 +122,32 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
         contentType: _contentType(image.name),
       );
 
-      final updates = <String, dynamic>{
-        'uid': uid,
-        nationalId ? 'nationalIdUrl' : 'professionalLicenseUrl': url,
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-
       await FirebaseFirestore.instance
           .collection('nurseDocuments')
           .doc(uid)
-          .set(updates, SetOptions(merge: true));
-
-      if (mounted) {
-        setState(() {
-          if (nationalId) {
-            _nationalIdUrl = url;
-            _isUploadingId = false;
-          } else {
-            _licenseUrl = url;
-            _isUploadingLicense = false;
-          }
-        });
-      }
-
-      await _setPendingIfReady();
-      _showMessage(
-        nationalId
-            ? 'تم رفع البطاقة الشخصية بنجاح'
-            : 'تم رفع كارنيه مزاولة المهنة بنجاح',
+          .set(
+        {
+          'uid': uid,
+          nationalId ? 'nationalIdUrl' : 'professionalLicenseUrl': url,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
       );
+
+      if (!mounted) return;
+      setState(() {
+        if (nationalId) {
+          _nationalIdUrl = url;
+          _isUploadingId = false;
+        } else {
+          _licenseUrl = url;
+          _isUploadingLicense = false;
+        }
+        if (_verificationStatus == 'rejected') {
+          _verificationStatus = 'not_submitted';
+          _rejectionReason = null;
+        }
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -145,34 +161,75 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
     }
   }
 
-  Future<void> _setPendingIfReady() async {
+  Future<void> _removeDocument({required bool nationalId}) async {
+    if (_locked) return;
+
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    final idReady = _nationalIdUrl != null && _nationalIdUrl!.isNotEmpty;
-    final licenseReady = _licenseUrl != null && _licenseUrl!.isNotEmpty;
+    if (uid == null) return;
 
-    if (uid == null || !idReady || !licenseReady) return;
+    try {
+      setState(() {
+        if (nationalId) {
+          _nationalIdUrl = null;
+        } else {
+          _licenseUrl = null;
+        }
+      });
 
-    await FirebaseFirestore.instance
-        .collection('nurseDocuments')
-        .doc(uid)
-        .set(
-      {
-        'uid': uid,
-        'nationalIdUrl': _nationalIdUrl,
-        'professionalLicenseUrl': _licenseUrl,
-        'verificationStatus': 'pending',
-        'submittedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'rejectionReason': FieldValue.delete(),
-      },
-      SetOptions(merge: true),
-    );
+      await FirebaseFirestore.instance
+          .collection('nurseDocuments')
+          .doc(uid)
+          .set(
+        {
+          nationalId ? 'nationalIdUrl' : 'professionalLicenseUrl':
+              FieldValue.delete(),
+          'verificationStatus': 'not_submitted',
+          'rejectionReason': FieldValue.delete(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    } catch (_) {
+      _showMessage('تعذر حذف الصورة');
+      await _loadVerification();
+    }
+  }
 
-    if (!mounted) return;
-    setState(() {
-      _verificationStatus = 'pending';
-      _rejectionReason = null;
-    });
+  Future<void> _submitVerification() async {
+    if (!_canSubmit) return;
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    setState(() => _isSubmitting = true);
+    try {
+      await FirebaseFirestore.instance
+          .collection('nurseDocuments')
+          .doc(uid)
+          .set(
+        {
+          'uid': uid,
+          'nationalIdUrl': _nationalIdUrl,
+          'professionalLicenseUrl': _licenseUrl,
+          'verificationStatus': 'pending',
+          'submittedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'rejectionReason': FieldValue.delete(),
+        },
+        SetOptions(merge: true),
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _verificationStatus = 'pending';
+        _rejectionReason = null;
+        _isSubmitting = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      _showMessage('تعذر إرسال طلب التوثيق');
+    }
   }
 
   String _contentType(String fileName) {
@@ -180,45 +237,6 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
     if (name.endsWith('.png')) return 'image/png';
     if (name.endsWith('.webp')) return 'image/webp';
     return 'image/jpeg';
-  }
-
-  String _statusLabel() {
-    switch (_verificationStatus) {
-      case 'pending':
-        return 'قيد المراجعة';
-      case 'approved':
-        return 'تم التوثيق';
-      case 'rejected':
-        return 'تم الرفض';
-      default:
-        return 'لم يتم استكمال التوثيق';
-    }
-  }
-
-  Color _statusColor() {
-    switch (_verificationStatus) {
-      case 'pending':
-        return Colors.orange;
-      case 'approved':
-        return AppColors.success;
-      case 'rejected':
-        return AppColors.error;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  IconData _statusIcon() {
-    switch (_verificationStatus) {
-      case 'pending':
-        return Icons.hourglass_top_rounded;
-      case 'approved':
-        return Icons.verified_rounded;
-      case 'rejected':
-        return Icons.cancel_rounded;
-      default:
-        return Icons.info_outline_rounded;
-    }
   }
 
   void _showMessage(String message) {
@@ -230,121 +248,111 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('التوثيق والتحقق')),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null &&
-                  _nationalIdUrl == null &&
-                  _licenseUrl == null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(_errorMessage!),
-                      const SizedBox(height: 12),
-                      FilledButton(
-                        onPressed: _loadVerification,
-                        child: const Text('إعادة المحاولة'),
-                      ),
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadVerification,
-                  child: ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      _statusCard(),
-                      const SizedBox(height: 18),
-                      const Text(
-                        'بيانات التحقق',
-                        style: TextStyle(
-                          fontSize: 19,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'ارفع البطاقة الشخصية وكارنيه مزاولة المهنة فقط. عند اكتمال الاثنين سيتم إرسال الطلب للمراجعة تلقائيًا.',
-                        style: TextStyle(color: AppColors.textSecondary),
-                      ),
-                      const SizedBox(height: 16),
-                      _documentCard(
-                        title: 'البطاقة الشخصية',
-                        subtitle: _nationalIdUrl != null && _nationalIdUrl!.isNotEmpty
-                            ? 'تم رفع البطاقة'
-                            : 'مطلوبة للتوثيق',
-                        icon: Icons.credit_card_outlined,
-                        url: _nationalIdUrl,
-                        isUploading: _isUploadingId,
-                        onUpload: () => _uploadDocument(nationalId: true),
-                      ),
-                      const SizedBox(height: 10),
-                      _documentCard(
-                        title: 'كارنيه مزاولة المهنة',
-                        subtitle: _licenseUrl != null && _licenseUrl!.isNotEmpty
-                            ? 'تم رفع الكارنيه'
-                            : 'مطلوب للتوثيق',
-                        icon: Icons.badge_outlined,
-                        url: _licenseUrl,
-                        isUploading: _isUploadingLicense,
-                        onUpload: () => _uploadDocument(nationalId: false),
-                      ),
-                      if (_rejectionReason != null &&
-                          _verificationStatus == 'rejected') ...[
-                        const SizedBox(height: 14),
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'سبب الرفض',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(_rejectionReason!),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-    );
-  }
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-  Widget _statusCard() {
-    final color = _statusColor();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
+    if (_verificationStatus == 'approved') {
+      return _fullStatusScreen(
+        icon: Icons.verified_rounded,
+        title: 'حساب موثق',
+        message: 'تم التحقق من بياناتك المهنية بنجاح.',
+        color: AppColors.success,
+      );
+    }
+
+    if (_verificationStatus == 'pending') {
+      return _fullStatusScreen(
+        icon: Icons.hourglass_top_rounded,
+        title: 'قيد المراجعة',
+        message: 'تم إرسال مستنداتك بنجاح، وسيتم مراجعتها من الإدارة.',
+        color: Colors.orange,
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('توثيق الحساب')),
+      body: SafeArea(
+        child: Column(
           children: [
-            Icon(_statusIcon(), color: color, size: 30),
-            const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
                 children: [
                   const Text(
-                    'حالة التوثيق',
-                    style: TextStyle(color: AppColors.textSecondary),
+                    'توثيق الممرض',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    _statusLabel(),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: color,
+                  const SizedBox(height: 8),
+                  const Text(
+                    'ارفع صورتين واضحتين: البطاقة الشخصية وكارنيه مزاولة المهنة.',
+                    style: TextStyle(color: AppColors.textSecondary, height: 1.5),
+                  ),
+                  const SizedBox(height: 22),
+                  _imageDocumentCard(
+                    title: 'البطاقة الشخصية',
+                    url: _nationalIdUrl,
+                    uploading: _isUploadingId,
+                    onAdd: () => _pickAndUpload(nationalId: true),
+                    onRemove: () => _removeDocument(nationalId: true),
+                  ),
+                  const SizedBox(height: 16),
+                  _imageDocumentCard(
+                    title: 'كارنيه مزاولة المهنة',
+                    url: _licenseUrl,
+                    uploading: _isUploadingLicense,
+                    onAdd: () => _pickAndUpload(nationalId: false),
+                    onRemove: () => _removeDocument(nationalId: false),
+                  ),
+                  if (_verificationStatus == 'rejected') ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: .08),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'تم رفض الطلب',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          if (_rejectionReason != null &&
+                              _rejectionReason!.isNotEmpty) ...[
+                            const SizedBox(height: 5),
+                            Text(_rejectionReason!),
+                          ],
+                          const SizedBox(height: 8),
+                          const Text('يمكنك تعديل الصور وإرسال الطلب مرة أخرى.'),
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
                 ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: FilledButton(
+                  onPressed: _canSubmit ? _submitVerification : null,
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text(
+                          'تحقق',
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                        ),
+                ),
               ),
             ),
           ],
@@ -353,60 +361,125 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
     );
   }
 
-  Widget _documentCard({
+  Widget _imageDocumentCard({
     required String title,
-    required String subtitle,
-    required IconData icon,
     required String? url,
-    required bool isUploading,
-    required VoidCallback onUpload,
+    required bool uploading,
+    required VoidCallback onAdd,
+    required VoidCallback onRemove,
   }) {
-    final uploaded = url != null && url.isNotEmpty;
+    final hasImage = url != null && url.isNotEmpty;
 
-    return Card(
-      child: ListTile(
-        leading: Icon(
-          icon,
-          color: uploaded ? AppColors.success : AppColors.primary,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
         ),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: isUploading
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (uploaded)
-                    IconButton(
-                      icon: const Icon(Icons.visibility_outlined),
-                      onPressed: () => _preview(url!),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: AspectRatio(
+            aspectRatio: 16 / 10,
+            child: hasImage
+                ? Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.network(
+                        url!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Center(
+                          child: Icon(Icons.broken_image_outlined, size: 42),
+                        ),
+                      ),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Material(
+                          color: Colors.black54,
+                          shape: const CircleBorder(),
+                          child: IconButton(
+                            tooltip: 'حذف الصورة',
+                            onPressed: onRemove,
+                            icon: const Icon(Icons.close, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Material(
+                    color: AppColors.surface,
+                    child: InkWell(
+                      onTap: onAdd,
+                      child: Center(
+                        child: uploading
+                            ? const CircularProgressIndicator()
+                            : const Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.add_a_photo_outlined, size: 40),
+                                  SizedBox(height: 8),
+                                  Text('اضغط لإضافة الصورة'),
+                                ],
+                              ),
+                      ),
                     ),
-                  FilledButton.tonal(
-                    onPressed: onUpload,
-                    child: Text(uploaded ? 'تغيير' : 'رفع'),
                   ),
-                ],
-              ),
-      ),
+          ),
+        ),
+        if (hasImage) ...[
+          const SizedBox(height: 7),
+          TextButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('تغيير الصورة'),
+          ),
+        ],
+      ],
     );
   }
 
-  void _preview(String url) {
-    showDialog<void>(
-      context: context,
-      builder: (_) => Dialog(
-        child: InteractiveViewer(
-          child: Image.network(
-            url,
-            fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => const Padding(
-              padding: EdgeInsets.all(32),
-              child: Text('تعذر عرض الصورة'),
-            ),
+  Widget _fullStatusScreen({
+    required IconData icon,
+    required String title,
+    required String message,
+    required Color color,
+  }) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('توثيق الحساب')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 96,
+                height: 96,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: .12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 54, color: color),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: AppColors.textSecondary,
+                  height: 1.5,
+                ),
+              ),
+            ],
           ),
         ),
       ),
