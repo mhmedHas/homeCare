@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -21,10 +20,10 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
   final _storage = SupabaseStorageService();
 
   bool _isLoading = true;
-  bool _isUploadingPhoto = false;
+  bool _isUploadingId = false;
   bool _isUploadingLicense = false;
   String? _errorMessage;
-  String? _photoUrl;
+  String? _nationalIdUrl;
   String? _licenseUrl;
   String _verificationStatus = 'not_submitted';
   String? _rejectionReason;
@@ -47,25 +46,19 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) throw StateError('unauthenticated');
 
-      final results = await Future.wait([
-        FirebaseFirestore.instance.collection('users').doc(uid).get(),
-        FirebaseFirestore.instance.collection('nurseProfiles').doc(uid).get(),
-        FirebaseFirestore.instance.collection('nurseDocuments').doc(uid).get(),
-      ]);
-
-      final userData = results[0].data() as Map<String, dynamic>?;
-      final profileData = results[1].data() as Map<String, dynamic>?;
-      final verificationData = results[2].data() as Map<String, dynamic>?;
-
-      final photo = profileData?['photoUrl'] ?? userData?['photoUrl'];
-      final license = verificationData?['professionalLicenseUrl'];
+      final doc = await FirebaseFirestore.instance
+          .collection('nurseDocuments')
+          .doc(uid)
+          .get();
+      final data = doc.data();
 
       if (!mounted) return;
       setState(() {
-        _photoUrl = photo?.toString();
-        _licenseUrl = license?.toString();
-        _verificationStatus = verificationData?['verificationStatus']?.toString() ?? 'not_submitted';
-        _rejectionReason = verificationData?['rejectionReason']?.toString();
+        _nationalIdUrl = data?['nationalIdUrl']?.toString();
+        _licenseUrl = data?['professionalLicenseUrl']?.toString();
+        _verificationStatus =
+            data?['verificationStatus']?.toString() ?? 'not_submitted';
+        _rejectionReason = data?['rejectionReason']?.toString();
         _isLoading = false;
       });
     } catch (_) {
@@ -77,75 +70,8 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
     }
   }
 
-  Future<void> _uploadProfilePhoto() async {
-    if (_isUploadingPhoto || _verificationStatus == 'pending') return;
-
-    try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) throw StateError('unauthenticated');
-
-      final source = await showModalBottomSheet<ImageSource>(
-        context: context,
-        builder: (context) => SafeArea(
-          child: Wrap(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.camera_alt_outlined),
-                title: const Text('التقاط صورة'),
-                onTap: () => Navigator.pop(context, ImageSource.camera),
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('اختيار من المعرض'),
-                onTap: () => Navigator.pop(context, ImageSource.gallery),
-              ),
-            ],
-          ),
-        ),
-      );
-      if (source == null) return;
-
-      final image = await _picker.pickImage(
-        source: source,
-        imageQuality: 85,
-        maxWidth: 1200,
-        maxHeight: 1200,
-      );
-      if (image == null) return;
-
-      if (mounted) setState(() => _isUploadingPhoto = true);
-      final bytes = await image.readAsBytes();
-      final url = await _storage.uploadNurseProfilePhoto(
-        uid: uid,
-        bytes: bytes,
-        contentType: _contentType(image.name),
-      );
-
-      await FirebaseFirestore.instance.collection('users').doc(uid).set(
-        {'photoUrl': url, 'updatedAt': FieldValue.serverTimestamp()},
-        SetOptions(merge: true),
-      );
-      await FirebaseFirestore.instance.collection('nurseProfiles').doc(uid).set(
-        {'photoUrl': url, 'updatedAt': FieldValue.serverTimestamp()},
-        SetOptions(merge: true),
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _photoUrl = url;
-        _isUploadingPhoto = false;
-      });
-      await _setPendingIfReady();
-      _showMessage('تم رفع الصورة الشخصية بنجاح');
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isUploadingPhoto = false);
-      _showMessage('تعذر رفع الصورة الشخصية، حاول مرة أخرى');
-    }
-  }
-
-  Future<void> _uploadLicense() async {
-    if (_isUploadingLicense || _verificationStatus == 'pending') return;
+  Future<void> _uploadDocument({required bool nationalId}) async {
+    if (nationalId ? _isUploadingId : _isUploadingLicense) return;
 
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -153,59 +79,87 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
 
       final image = await _picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 85,
+        imageQuality: 88,
         maxWidth: 1800,
         maxHeight: 1800,
       );
       if (image == null) return;
 
-      if (mounted) setState(() => _isUploadingLicense = true);
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('nurse_documents')
-          .child(uid)
-          .child('professional_license.jpg');
+      if (mounted) {
+        setState(() {
+          if (nationalId) {
+            _isUploadingId = true;
+          } else {
+            _isUploadingLicense = true;
+          }
+        });
+      }
 
-      await ref.putData(
-        await image.readAsBytes(),
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
-      final url = await ref.getDownloadURL();
-
-      await FirebaseFirestore.instance.collection('nurseDocuments').doc(uid).set(
-        {
-          'uid': uid,
-          'professionalLicenseUrl': url,
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
+      final Uint8List bytes = await image.readAsBytes();
+      final url = await _storage.uploadNurseVerificationDocument(
+        uid: uid,
+        documentType: nationalId ? 'national_id' : 'professional_license',
+        bytes: bytes,
+        contentType: _contentType(image.name),
       );
 
-      if (!mounted) return;
-      setState(() {
-        _licenseUrl = url;
-        _isUploadingLicense = false;
-      });
+      final updates = <String, dynamic>{
+        'uid': uid,
+        nationalId ? 'nationalIdUrl' : 'professionalLicenseUrl': url,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      await FirebaseFirestore.instance
+          .collection('nurseDocuments')
+          .doc(uid)
+          .set(updates, SetOptions(merge: true));
+
+      if (mounted) {
+        setState(() {
+          if (nationalId) {
+            _nationalIdUrl = url;
+            _isUploadingId = false;
+          } else {
+            _licenseUrl = url;
+            _isUploadingLicense = false;
+          }
+        });
+      }
+
       await _setPendingIfReady();
-      _showMessage('تم رفع كارنيه مزاولة المهنة بنجاح');
+      _showMessage(
+        nationalId
+            ? 'تم رفع البطاقة الشخصية بنجاح'
+            : 'تم رفع كارنيه مزاولة المهنة بنجاح',
+      );
     } catch (_) {
       if (!mounted) return;
-      setState(() => _isUploadingLicense = false);
-      _showMessage('تعذر رفع كارنيه مزاولة المهنة، حاول مرة أخرى');
+      setState(() {
+        if (nationalId) {
+          _isUploadingId = false;
+        } else {
+          _isUploadingLicense = false;
+        }
+      });
+      _showMessage('تعذر رفع الصورة، حاول مرة أخرى');
     }
   }
 
   Future<void> _setPendingIfReady() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null || _photoUrl == null || _photoUrl!.isEmpty || _licenseUrl == null || _licenseUrl!.isEmpty) {
-      return;
-    }
+    final idReady = _nationalIdUrl != null && _nationalIdUrl!.isNotEmpty;
+    final licenseReady = _licenseUrl != null && _licenseUrl!.isNotEmpty;
 
-    await FirebaseFirestore.instance.collection('nurseDocuments').doc(uid).set(
+    if (uid == null || !idReady || !licenseReady) return;
+
+    await FirebaseFirestore.instance
+        .collection('nurseDocuments')
+        .doc(uid)
+        .set(
       {
         'uid': uid,
+        'nationalIdUrl': _nationalIdUrl,
         'professionalLicenseUrl': _licenseUrl,
-        'profilePhotoUrl': _photoUrl,
         'verificationStatus': 'pending',
         'submittedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -280,14 +234,19 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
       appBar: AppBar(title: const Text('التوثيق والتحقق')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null && _photoUrl == null && _licenseUrl == null
+          : _errorMessage != null &&
+                  _nationalIdUrl == null &&
+                  _licenseUrl == null
               ? Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(_errorMessage!),
                       const SizedBox(height: 12),
-                      FilledButton(onPressed: _loadVerification, child: const Text('إعادة المحاولة')),
+                      FilledButton(
+                        onPressed: _loadVerification,
+                        child: const Text('إعادة المحاولة'),
+                      ),
                     ],
                   ),
                 )
@@ -300,19 +259,41 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
                       _statusCard(),
                       const SizedBox(height: 18),
                       const Text(
-                        'المطلوب للتوثيق',
-                        style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+                        'بيانات التحقق',
+                        style: TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                        'ارفع الصورة الشخصية وكارنيه مزاولة المهنة. بمجرد اكتمالهما سيتم إرسال الحساب تلقائيًا للمراجعة.',
+                        'ارفع البطاقة الشخصية وكارنيه مزاولة المهنة فقط. عند اكتمال الاثنين سيتم إرسال الطلب للمراجعة تلقائيًا.',
                         style: TextStyle(color: AppColors.textSecondary),
                       ),
                       const SizedBox(height: 16),
-                      _photoCard(),
+                      _documentCard(
+                        title: 'البطاقة الشخصية',
+                        subtitle: _nationalIdUrl != null && _nationalIdUrl!.isNotEmpty
+                            ? 'تم رفع البطاقة'
+                            : 'مطلوبة للتوثيق',
+                        icon: Icons.credit_card_outlined,
+                        url: _nationalIdUrl,
+                        isUploading: _isUploadingId,
+                        onUpload: () => _uploadDocument(nationalId: true),
+                      ),
                       const SizedBox(height: 10),
-                      _licenseCard(),
-                      if (_rejectionReason != null && _verificationStatus == 'rejected') ...[
+                      _documentCard(
+                        title: 'كارنيه مزاولة المهنة',
+                        subtitle: _licenseUrl != null && _licenseUrl!.isNotEmpty
+                            ? 'تم رفع الكارنيه'
+                            : 'مطلوب للتوثيق',
+                        icon: Icons.badge_outlined,
+                        url: _licenseUrl,
+                        isUploading: _isUploadingLicense,
+                        onUpload: () => _uploadDocument(nationalId: false),
+                      ),
+                      if (_rejectionReason != null &&
+                          _verificationStatus == 'rejected') ...[
                         const SizedBox(height: 14),
                         Card(
                           child: Padding(
@@ -320,7 +301,10 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('سبب الرفض', style: TextStyle(fontWeight: FontWeight.bold)),
+                                const Text(
+                                  'سبب الرفض',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                                 const SizedBox(height: 6),
                                 Text(_rejectionReason!),
                               ],
@@ -347,9 +331,19 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('حالة التوثيق', style: TextStyle(color: AppColors.textSecondary)),
+                  const Text(
+                    'حالة التوثيق',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
                   const SizedBox(height: 3),
-                  Text(_statusLabel(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: color)),
+                  Text(
+                    _statusLabel(),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: color,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -359,42 +353,44 @@ class _NurseDocumentsScreenState extends State<NurseDocumentsScreen> {
     );
   }
 
-  Widget _photoCard() {
-    final uploaded = _photoUrl != null && _photoUrl!.isNotEmpty;
-    return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          radius: 25,
-          backgroundImage: uploaded ? NetworkImage(_photoUrl!) : null,
-          child: uploaded ? null : const Icon(Icons.person_outline),
-        ),
-        title: const Text('الصورة الشخصية'),
-        subtitle: Text(uploaded ? 'تم رفع الصورة' : 'مطلوبة للتوثيق'),
-        trailing: _isUploadingPhoto
-            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-            : FilledButton.tonal(
-                onPressed: _verificationStatus == 'pending' ? null : _uploadProfilePhoto,
-                child: Text(uploaded ? 'تغيير' : 'رفع'),
-              ),
-      ),
-    );
-  }
+  Widget _documentCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required String? url,
+    required bool isUploading,
+    required VoidCallback onUpload,
+  }) {
+    final uploaded = url != null && url.isNotEmpty;
 
-  Widget _licenseCard() {
-    final uploaded = _licenseUrl != null && _licenseUrl!.isNotEmpty;
     return Card(
       child: ListTile(
-        leading: Icon(Icons.badge_outlined, color: uploaded ? AppColors.success : AppColors.primary),
-        title: const Text('كارنيه مزاولة المهنة'),
-        subtitle: Text(uploaded ? 'تم رفع الكارنيه' : 'مطلوب للتوثيق'),
-        trailing: _isUploadingLicense
-            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-            : uploaded
-                ? IconButton(icon: const Icon(Icons.visibility_outlined), onPressed: () => _preview(_licenseUrl!))
-                : FilledButton.tonal(
-                    onPressed: _verificationStatus == 'pending' ? null : _uploadLicense,
-                    child: const Text('رفع'),
+        leading: Icon(
+          icon,
+          color: uploaded ? AppColors.success : AppColors.primary,
+        ),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: isUploading
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (uploaded)
+                    IconButton(
+                      icon: const Icon(Icons.visibility_outlined),
+                      onPressed: () => _preview(url!),
+                    ),
+                  FilledButton.tonal(
+                    onPressed: onUpload,
+                    child: Text(uploaded ? 'تغيير' : 'رفع'),
                   ),
+                ],
+              ),
       ),
     );
   }
