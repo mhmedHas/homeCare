@@ -62,10 +62,7 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
 
       final results = await Future.wait([
         UserService().getUser(firebaseUser.uid),
-        FirebaseFirestore.instance
-            .collection('nurseProfiles')
-            .doc(firebaseUser.uid)
-            .get(),
+        FirebaseFirestore.instance.collection('nurseProfiles').doc(firebaseUser.uid).get(),
       ]);
 
       final appUser = results[0] as AppUser?;
@@ -262,22 +259,15 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         children: [
           _buildProfileHeader(),
           const SizedBox(height: 12),
-          // بيانات التخصص وسنوات الخبرة والخدمات أصبحت داخل إعدادات العمل.
-          // تم إزالة اختصار "الملف المهني" من صفحة حساب الممرض لتجنب تكرار نفس البيانات.
           _buildMenuItem(
             Icons.location_city_outlined,
             'إعدادات العمل والمحافظات',
             () => context.push('/nurse/settings'),
           ),
           _buildMenuItem(
-            Icons.upload_file_outlined,
-            'المستندات',
+            Icons.verified_user_outlined,
+            'التوثيق والتحقق',
             () => context.push('/nurse/documents'),
-          ),
-          _buildMenuItem(
-            Icons.verified_outlined,
-            'حالة التحقق',
-            () => context.push('/nurse/verification-status'),
           ),
           _buildMenuItem(
             Icons.calendar_month_outlined,
