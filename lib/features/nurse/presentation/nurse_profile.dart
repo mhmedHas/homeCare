@@ -173,6 +173,24 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         SetOptions(merge: true),
       );
 
+      final verificationDoc = await db.collection('nurseDocuments').doc(uid).get();
+      final verificationData = verificationDoc.data();
+      final licenseUrl = verificationData?['professionalLicenseUrl']?.toString();
+
+      if (licenseUrl != null && licenseUrl.isNotEmpty) {
+        await db.collection('nurseDocuments').doc(uid).set(
+          {
+            'uid': uid,
+            'profilePhotoUrl': photoUrl,
+            'verificationStatus': 'pending',
+            'submittedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+            'rejectionReason': FieldValue.delete(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+
       if (!mounted) return;
 
       setState(() {
@@ -180,7 +198,11 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         _isUploadingPhoto = false;
       });
 
-      _showMessage('تم تغيير صورة البروفايل بنجاح');
+      _showMessage(
+        licenseUrl != null && licenseUrl.isNotEmpty
+            ? 'تم رفع الصورة وإرسال المستندات للمراجعة'
+            : 'تم تغيير صورة البروفايل بنجاح',
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isUploadingPhoto = false);
