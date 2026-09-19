@@ -200,7 +200,7 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
       }
       if (rejectedCount > 0) await batch.commit();
 
-      if (mounted) context.go('/client/booking-confirmation/${bookingRef.id}');
+      if (mounted) context.go('/client/booking-details/${bookingRef.id}');
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
