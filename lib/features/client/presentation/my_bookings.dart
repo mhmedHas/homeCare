@@ -23,7 +23,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadBookings();
   }
 
@@ -59,21 +59,25 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     }
   }
 
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
   List<Booking> _bookingsForTab(int index) {
-    switch (index) {
-      case 1:
-        return _bookings.where((b) {
-          return b.status == 'pending_payment' ||
-              b.status == 'confirmed' ||
-              b.status == 'in_progress';
-        }).toList();
-      case 2:
-        return _bookings.where((b) => b.status == 'completed').toList();
-      case 3:
-        return _bookings.where((b) => b.status == 'cancelled').toList();
-      default:
-        return _bookings;
-    }
+    final now = DateTime.now();
+    final result = _bookings.where((b) {
+      if (b.status == 'cancelled') return false;
+      if (index == 0) {
+        return b.shiftEnd.isBefore(now) && b.paymentStatus == 'verified';
+      }
+      if (index == 1) return _sameDay(b.shiftStart, now);
+      if (index == 2) return b.shiftStart.isAfter(now);
+      return false;
+    }).toList();
+
+    result.sort((a, b) => index == 0
+        ? b.shiftEnd.compareTo(a.shiftEnd)
+        : a.shiftStart.compareTo(b.shiftStart));
+    return result;
   }
 
   @override
@@ -86,10 +90,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
           controller: _tabController,
           isScrollable: true,
           tabs: const [
-            Tab(text: 'الكل'),
-            Tab(text: 'القادمة'),
-            Tab(text: 'السابقة'),
-            Tab(text: 'الملغاة'),
+            Tab(text: 'منتهية'),
+            Tab(text: 'جارية'),
+            Tab(text: 'قادمة'),
           ],
         ),
       ),
@@ -129,14 +132,14 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       onRefresh: _loadBookings,
       child: TabBarView(
         controller: _tabController,
-        children: List.generate(4, (index) {
-          return _buildList(_bookingsForTab(index));
+        children: List.generate(3, (index) {
+          return _buildList(_bookingsForTab(index), index);
         }),
       ),
     );
   }
 
-  Widget _buildList(List<Booking> list) {
+  Widget _buildList(List<Booking> list, int tab) {
     if (list.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -198,8 +201,12 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                   ),
                   const SizedBox(width: 8),
                   _StatusBadge(
-                    label: _getStatusLabel(booking.status),
-                    color: _getStatusColor(booking.status),
+                    label: tab == 0 ? 'منتهٍ' : tab == 1 ? 'اليوم' : 'قادم',
+                    color: tab == 0
+                        ? Colors.green
+                        : tab == 1
+                            ? Colors.blue
+                            : AppColors.primary,
                   ),
                   const SizedBox(width: 4),
                   const Icon(Icons.chevron_left),
@@ -212,40 +219,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     );
   }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'pending_payment':
-        return Colors.orange;
-      case 'confirmed':
-        return Colors.blue;
-      case 'in_progress':
-        return Colors.purple;
-      case 'completed':
-        return Colors.green;
-      case 'cancelled':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
 
-  String _getStatusLabel(String status) {
-    switch (status) {
-      case 'pending_payment':
-        return 'انتظار الدفع';
-      case 'confirmed':
-        return 'مؤكد';
-      case 'in_progress':
-        return 'جاري';
-      case 'completed':
-        return 'مكتمل';
-      case 'cancelled':
-        return 'ملغي';
-      default:
-        return 'غير معروف';
-    }
-  }
-}
 
 class _StatusBadge extends StatelessWidget {
   final String label;
