@@ -10,6 +10,7 @@ class AppUser {
   final bool isActive;
   final bool isVerified;
   final bool profileCompleted;
+  final double balance;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -23,6 +24,7 @@ class AppUser {
     this.isActive = true,
     this.isVerified = false,
     this.profileCompleted = false,
+    this.balance = 0,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -38,26 +40,43 @@ class AppUser {
       'isActive': isActive,
       'isVerified': isVerified,
       'profileCompleted': profileCompleted,
+      'balance': balance,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
 
   factory AppUser.fromFirestore(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+    final raw = doc.data();
+    final data = raw is Map<String, dynamic> ? raw : <String, dynamic>{};
+
     return AppUser(
-      uid: data['uid'] ?? '',
-      role: data['role'] ?? 'client',
-      name: data['name'] ?? '',
-      phone: data['phone'] ?? '',
-      email: data['email'],
-      photoUrl: data['photoUrl'],
-      isActive: data['isActive'] ?? true,
-      isVerified: data['isVerified'] ?? false,
-      profileCompleted: data['profileCompleted'] ?? false,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      uid: data['uid']?.toString() ?? doc.id,
+      role: data['role']?.toString() ?? 'client',
+      name: data['name']?.toString() ?? '',
+      phone: data['phone']?.toString() ?? '',
+      email: data['email']?.toString(),
+      photoUrl: data['photoUrl']?.toString(),
+      isActive: data['isActive'] is bool ? data['isActive'] as bool : true,
+      isVerified: data['isVerified'] is bool ? data['isVerified'] as bool : false,
+      profileCompleted:
+          data['profileCompleted'] is bool ? data['profileCompleted'] as bool : false,
+      balance: _double(data['balance']),
+      createdAt: _date(data['createdAt']),
+      updatedAt: _date(data['updatedAt']),
     );
+  }
+
+  static double _double(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static DateTime _date(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    return DateTime.now();
   }
 
   AppUser copyWith({
@@ -65,6 +84,7 @@ class AppUser {
     String? phone,
     String? photoUrl,
     bool? profileCompleted,
+    double? balance,
   }) {
     return AppUser(
       uid: uid,
@@ -76,6 +96,7 @@ class AppUser {
       isActive: isActive,
       isVerified: isVerified,
       profileCompleted: profileCompleted ?? this.profileCompleted,
+      balance: balance ?? this.balance,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );
