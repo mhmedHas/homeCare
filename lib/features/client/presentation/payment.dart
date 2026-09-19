@@ -146,6 +146,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
     });
 
     try {
+      if (booking.status != 'completed') {
+        throw StateError('care_not_completed');
+      }
+
       if (booking.paymentStatus != 'awaiting_verification') {
         await BookingService().submitPaymentForVerification(
           bookingId: booking.id,
@@ -243,6 +247,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     final awaiting = booking.paymentStatus == 'awaiting_verification';
     final verified = booking.paymentStatus == 'verified';
     final rejected = booking.paymentStatus == 'rejected';
+    final careCompleted = booking.status == 'completed';
 
     return Scaffold(
       appBar: AppBar(
@@ -260,14 +265,21 @@ class _PaymentScreenState extends State<PaymentScreen> {
           children: [
             _buildOrderCard(booking),
             const SizedBox(height: 14),
-            if (verified)
+            if (!careCompleted)
+              _statusCard(
+                Icons.lock_outline,
+                AppColors.primary,
+                'الدفع غير متاح حاليًا',
+                'لن يظهر الدفع إلا بعد أن ينهي الممرض طلب الرعاية.',
+              )
+            else if (verified)
               _statusCard(
                 Icons.verified,
                 AppColors.success,
                 'تم تأكيد الدفع',
                 'تم اعتماد التحويل من الإدارة.',
               )
-            else ...[
+            else if (careCompleted) ...[
               if (rejected)
                 _statusCard(
                   Icons.error_outline,
