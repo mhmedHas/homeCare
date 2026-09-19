@@ -38,6 +38,8 @@ import '../../features/nurse/presentation/earnings.dart';
 import '../../features/nurse/presentation/nurse_reviews.dart';
 import '../../features/nurse/presentation/nurse_profile.dart' as nurse_profile;
 import '../../features/nurse/presentation/nurse_settings.dart';
+import '../../features/admin/presentation/admin_payment_dashboard.dart';
+import '../../services/admin_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
 
@@ -60,134 +62,187 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/role', builder: (_, __) => const RoleSelectionScreen()),
     GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
     GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
+    GoRoute(
+      path: '/admin/payments',
+      builder: (_, __) => const AdminPaymentDashboard(),
+    ),
     ShellRoute(
       builder: (_, __, child) => ClientShell(child: child),
       routes: [
+        GoRoute(path: '/client/home', builder: (_, __) => const ClientHomeScreen()),
         GoRoute(
-            path: '/client/home', builder: (_, __) => const ClientHomeScreen()),
+          path: '/client/create-request',
+          builder: (_, __) => const CreateCareRequestScreen(),
+        ),
         GoRoute(
-            path: '/client/create-request',
-            builder: (_, __) => const CreateCareRequestScreen()),
+          path: '/client/my-requests',
+          builder: (_, __) => const MyRequestsScreen(),
+        ),
         GoRoute(
-            path: '/client/my-requests',
-            builder: (_, __) => const MyRequestsScreen()),
+          path: '/client/request-details/:id',
+          builder: (_, s) => RequestDetailsScreen(
+            requestId: s.pathParameters['id']!,
+          ),
+        ),
         GoRoute(
-            path: '/client/request-details/:id',
-            builder: (_, s) =>
-                RequestDetailsScreen(requestId: s.pathParameters['id']!)),
+          path: '/client/request-offers/:id',
+          builder: (_, s) => CareOffersScreen(
+            requestId: s.pathParameters['id']!,
+          ),
+        ),
         GoRoute(
-            path: '/client/request-offers/:id',
-            builder: (_, s) =>
-                CareOffersScreen(requestId: s.pathParameters['id']!)),
+          path: '/client/nurse-results/:id',
+          builder: (_, s) => NurseResultsScreen(
+            requestId: s.pathParameters['id']!,
+          ),
+        ),
         GoRoute(
-            path: '/client/nurse-results/:id',
-            builder: (_, s) =>
-                NurseResultsScreen(requestId: s.pathParameters['id']!)),
+          path: '/client/nurse-profile/:id',
+          builder: (_, s) => NurseProfileScreen(
+            nurseId: s.pathParameters['id']!,
+            requestId: s.uri.queryParameters['requestId'] ?? '',
+          ),
+        ),
         GoRoute(
-            path: '/client/nurse-profile/:id',
-            builder: (_, s) => NurseProfileScreen(
-                nurseId: s.pathParameters['id']!,
-                requestId: s.uri.queryParameters['requestId'] ?? '')),
+          path: '/client/booking-confirmation/:id',
+          builder: (_, s) => BookingConfirmationScreen(
+            bookingId: s.pathParameters['id']!,
+          ),
+        ),
         GoRoute(
-            path: '/client/booking-confirmation/:id',
-            builder: (_, s) =>
-                BookingConfirmationScreen(bookingId: s.pathParameters['id']!)),
+          path: '/client/booking-details/:id',
+          builder: (_, s) => BookingDetailsScreen(
+            bookingId: s.pathParameters['id']!,
+          ),
+        ),
         GoRoute(
-            path: '/client/booking-details/:id',
-            builder: (_, s) =>
-                BookingDetailsScreen(bookingId: s.pathParameters['id']!)),
+          path: '/client/my-bookings',
+          builder: (_, __) => const MyBookingsScreen(),
+        ),
         GoRoute(
-            path: '/client/my-bookings',
-            builder: (_, __) => const MyBookingsScreen()),
+          path: '/client/messages',
+          builder: (_, __) => const ClientMessagesScreen(),
+        ),
         GoRoute(
-            path: '/client/messages',
-            builder: (_, __) => const ClientMessagesScreen()),
+          path: '/client/chat/:id',
+          builder: (_, s) => ChatScreen(
+            bookingId: s.pathParameters['id']!,
+          ),
+        ),
         GoRoute(
-            path: '/client/chat/:id',
-            builder: (_, s) => ChatScreen(bookingId: s.pathParameters['id']!)),
+          path: '/client/rating/:id',
+          builder: (_, s) => RatingScreen(
+            bookingId: s.pathParameters['id']!,
+          ),
+        ),
         GoRoute(
-            path: '/client/rating/:id',
-            builder: (_, s) =>
-                RatingScreen(bookingId: s.pathParameters['id']!)),
+          path: '/client/payment/:id',
+          builder: (_, s) => PaymentScreen(
+            bookingId: s.pathParameters['id']!,
+          ),
+        ),
         GoRoute(
-            path: '/client/payment/:id',
-            builder: (_, s) =>
-                PaymentScreen(bookingId: s.pathParameters['id']!)),
-        GoRoute(
-            path: '/client/profile',
-            builder: (_, __) => const ClientProfileScreen()),
+          path: '/client/profile',
+          builder: (_, __) => const ClientProfileScreen(),
+        ),
       ],
     ),
     ShellRoute(
       builder: (_, __, child) => NurseShell(child: child),
       routes: [
+        GoRoute(path: '/nurse/home', builder: (_, __) => const NurseHomeScreen()),
         GoRoute(
-            path: '/nurse/home', builder: (_, __) => const NurseHomeScreen()),
+          path: '/nurse/registration',
+          builder: (_, __) => const NurseRegistrationScreen(),
+        ),
         GoRoute(
-            path: '/nurse/registration',
-            builder: (_, __) => const NurseRegistrationScreen()),
+          path: '/nurse/professional-profile',
+          builder: (_, __) => const NurseProfessionalProfileScreen(),
+        ),
         GoRoute(
-            path: '/nurse/professional-profile',
-            builder: (_, __) => const NurseProfessionalProfileScreen()),
+          path: '/nurse/documents',
+          builder: (_, __) => const NurseDocumentsScreen(),
+        ),
         GoRoute(
-            path: '/nurse/documents',
-            builder: (_, __) => const NurseDocumentsScreen()),
+          path: '/nurse/verification-status',
+          builder: (_, __) => const VerificationStatusScreen(),
+        ),
         GoRoute(
-            path: '/nurse/verification-status',
-            builder: (_, __) => const VerificationStatusScreen()),
+          path: '/nurse/available-requests',
+          builder: (_, __) => const AvailableRequestsScreen(),
+        ),
         GoRoute(
-            path: '/nurse/available-requests',
-            builder: (_, __) => const AvailableRequestsScreen()),
+          path: '/nurse/request-details/:id',
+          builder: (_, s) => RequestDetailsNurseScreen(
+            requestId: s.pathParameters['id']!,
+          ),
+        ),
         GoRoute(
-            path: '/nurse/request-details/:id',
-            builder: (_, s) =>
-                RequestDetailsNurseScreen(requestId: s.pathParameters['id']!)),
+          path: '/nurse/current-shift',
+          builder: (_, s) => CurrentShiftScreen(
+            bookingId: s.uri.queryParameters['bookingId'],
+          ),
+        ),
         GoRoute(
-            path: '/nurse/current-shift',
-            builder: (_, s) => CurrentShiftScreen(
-                bookingId: s.uri.queryParameters['bookingId'])),
+          path: '/nurse/bookings',
+          builder: (_, __) => const NurseBookingsScreen(),
+        ),
         GoRoute(
-            path: '/nurse/bookings',
-            builder: (_, __) => const NurseBookingsScreen()),
+          path: '/nurse/previous-shifts',
+          builder: (_, __) => const PreviousShiftsScreen(),
+        ),
         GoRoute(
-            path: '/nurse/previous-shifts',
-            builder: (_, __) => const PreviousShiftsScreen()),
+          path: '/nurse/messages',
+          builder: (_, __) => const NurseMessagesScreen(),
+        ),
         GoRoute(
-            path: '/nurse/messages',
-            builder: (_, __) => const NurseMessagesScreen()),
+          path: '/nurse/chat/:id',
+          builder: (_, s) => ChatScreen(
+            bookingId: s.pathParameters['id']!,
+          ),
+        ),
         GoRoute(
-            path: '/nurse/chat/:id',
-            builder: (_, s) => ChatScreen(bookingId: s.pathParameters['id']!)),
+          path: '/nurse/earnings',
+          builder: (_, __) => const EarningsScreen(),
+        ),
         GoRoute(
-            path: '/nurse/earnings',
-            builder: (_, __) => const EarningsScreen()),
+          path: '/nurse/reviews',
+          builder: (_, __) => const NurseReviewsScreen(),
+        ),
         GoRoute(
-            path: '/nurse/reviews',
-            builder: (_, __) => const NurseReviewsScreen()),
+          path: '/nurse/profile',
+          builder: (_, __) => const nurse_profile.NurseProfileScreen(),
+        ),
         GoRoute(
-            path: '/nurse/profile',
-            builder: (_, __) => const nurse_profile.NurseProfileScreen()),
-        GoRoute(
-            path: '/nurse/settings',
-            builder: (_, __) => const NurseSettingsScreen()),
+          path: '/nurse/settings',
+          builder: (_, __) => const NurseSettingsScreen(),
+        ),
       ],
     ),
   ],
 );
 
 Future<String?> _redirectLogic(
-    BuildContext context, GoRouterState state) async {
+  BuildContext context,
+  GoRouterState state,
+) async {
   final auth = AuthService();
   final currentPath = state.uri.path;
   final user = auth.currentUser;
 
   if (user == null) {
-    // New authentication flow: Splash -> Login -> Role -> Register.
-    // Onboarding is intentionally skipped.
-    if (currentPath == '/onboarding') return '/login';
-
-    const publicPaths = {'/login', '/register', '/role', '/splash'};
+    const publicPaths = {'/login', '/register', '/role', '/splash', '/onboarding'};
     return publicPaths.contains(currentPath) ? null : '/login';
+  }
+
+  final isAdmin = await AdminService().isAdmin(user.uid);
+
+  if (isAdmin) {
+    return currentPath.startsWith('/admin') ? null : '/admin/payments';
+  }
+
+  if (currentPath.startsWith('/admin')) {
+    return '/login';
   }
 
   final appUser = await UserService().getUser(user.uid);
@@ -199,15 +254,19 @@ Future<String?> _redirectLogic(
 
   final role = appUser.role;
   const authPaths = {'/login', '/register', '/role', '/splash', '/onboarding'};
+
   if (authPaths.contains(currentPath)) {
     if (role == 'client') return '/client/home';
     if (role == 'nurse') return '/nurse/home';
   }
 
-  if (role == 'client')
+  if (role == 'client') {
     return currentPath.startsWith('/nurse') ? '/client/home' : null;
-  if (role == 'nurse')
+  }
+
+  if (role == 'nurse') {
     return currentPath.startsWith('/client') ? '/nurse/home' : null;
+  }
 
   await auth.logout();
   return '/login';
