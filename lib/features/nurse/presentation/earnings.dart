@@ -47,8 +47,11 @@ class _EarningsScreenState extends State<EarningsScreen> {
           
           .get();
 
-      final bookings =
-          snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList();
+      final bookings = snapshot.docs
+          .map((doc) => Booking.fromFirestore(doc))
+          .where((b) => b.status == 'completed' && b.paymentStatus == 'verified')
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       setState(() {
         _transactions = bookings;
         _totalShifts = bookings.length;
@@ -150,7 +153,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
                                       subtitle: Text(DateFormat.yMMMd()
                                           .format(t.createdAt)),
                                       trailing: Text(
-                                        '+\${t.nurseEarnings.toStringAsFixed(0)} ج.م',
+                                        '+${t.nurseEarnings.toStringAsFixed(0)} ج.م',
                                         style: const TextStyle(
                                             color: AppColors.success,
                                             fontWeight: FontWeight.bold),
