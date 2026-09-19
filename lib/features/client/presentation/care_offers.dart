@@ -153,7 +153,8 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
         final safeMinute = minute.clamp(0, 59).toInt();
         final shiftStart = DateTime(startDate.year, startDate.month, startDate.day, safeHour, safeMinute);
         final base = selectedPrice * days;
-        final platformFee = base * 0.10;
+        final platformFee = base * 0.15;
+        final nurseEarnings = base - platformFee;
 
         tx.update(requestRef, {
           'status': 'booked',
@@ -178,7 +179,8 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
           'pricePerShift': selectedPrice,
           'daysCount': days,
           'platformFee': platformFee,
-          'totalAmount': base + platformFee,
+          'totalAmount': base,
+          'nurseEarnings': nurseEarnings,
           'status': 'pending_payment',
           'paymentStatus': 'unpaid',
           'createdAt': FieldValue.serverTimestamp(),
