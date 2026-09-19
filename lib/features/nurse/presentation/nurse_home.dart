@@ -62,7 +62,9 @@ class _NurseHomeScreenState extends State<NurseHomeScreen> {
           .where('status', isEqualTo: 'open')
           .limit(20)
           .get();
-      final requests = requestsSnapshot.docs.map(CareRequest.fromFirestore).toList();\n      // أحدث طلب إنشاءً يظهر في أول القائمة.\n      requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final requests = requestsSnapshot.docs.map(CareRequest.fromFirestore).toList();
+      // أحدث طلب إنشاءً يظهر في أول القائمة.
+      requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       if (mounted) {
         setState(() {
           _availableRequests = requests;
@@ -244,7 +246,27 @@ class _NurseHomeScreenState extends State<NurseHomeScreen> {
                                 style: const TextStyle(color: Colors.white),
                               ),
                             ),
-                            title: Row(\n                              children: [\n                                Expanded(\n                                  child: Text(\n                                    request.patientName.isNotEmpty ? request.patientName : 'صاحب الطلب',\n                                    style: const TextStyle(fontWeight: FontWeight.w600),\n                                  ),\n                                ),\n                                Container(\n                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),\n                                  decoration: BoxDecoration(\n                                    color: AppColors.primaryLight,\n                                    borderRadius: BorderRadius.circular(7),\n                                  ),\n                                  child: Text(\n                                    '#${request.id.substring(0, request.id.length > 6 ? 6 : request.id.length)}',\n                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),\n                                  ),\n                                ),\n                              ],\n                            ),
+                            title: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    request.patientName.isNotEmpty ? request.patientName : 'صاحب الطلب',
+                                    style: const TextStyle(fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryLight,
+                                    borderRadius: BorderRadius.circular(7),
+                                  ),
+                                  child: Text(
+                                    '#${request.id.substring(0, request.id.length > 6 ? 6 : request.id.length)}',
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                  ),
+                                ),
+                              ],
+                            ),
                             subtitle: Text(
                               '${request.careType} • ${request.shiftHours} ساعة • ${request.governorate}',
                               style: const TextStyle(fontSize: 12),
