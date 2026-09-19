@@ -17,6 +17,22 @@ class BookingService {
     return Booking.fromFirestore(doc);
   }
 
+  Future<void> submitPaymentForVerification({
+    required String bookingId,
+    required String paymentMethod,
+    String? paymentReference,
+  }) async {
+    await _bookingsCollection.doc(bookingId).update({
+      'paymentStatus': 'awaiting_verification',
+      'paymentMethod': paymentMethod,
+      'paymentReference': paymentReference?.trim().isEmpty == true
+          ? null
+          : paymentReference?.trim(),
+      'paymentSubmittedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<void> updateBookingStatus(String id, String status) async {
     await _bookingsCollection.doc(id).update({
       'status': status,
