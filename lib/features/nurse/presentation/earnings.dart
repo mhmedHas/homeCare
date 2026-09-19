@@ -44,8 +44,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
       final snapshot = await FirebaseFirestore.instance
           .collection('bookings')
           .where('nurseId', isEqualTo: user.uid)
-          .where('status', isEqualTo: 'completed')
-          .orderBy('createdAt', descending: true)
+          
           .get();
 
       final bookings =
@@ -53,7 +52,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
       setState(() {
         _transactions = bookings;
         _totalShifts = bookings.length;
-        _totalEarnings = bookings.fold(0, (sum, b) => sum + b.totalAmount);
+        _totalEarnings = bookings.fold(0, (sum, b) => sum + b.nurseEarnings);
 
         final now = DateTime.now();
         final monthStart = DateTime(now.year, now.month, 1);
@@ -61,11 +60,11 @@ class _EarningsScreenState extends State<EarningsScreen> {
 
         _monthEarnings = bookings
             .where((b) => b.createdAt.isAfter(monthStart))
-            .fold(0, (sum, b) => sum + b.totalAmount);
+            .fold(0, (sum, b) => sum + b.nurseEarnings);
 
         _weekEarnings = bookings
             .where((b) => b.createdAt.isAfter(weekStart))
-            .fold(0, (sum, b) => sum + b.totalAmount);
+            .fold(0, (sum, b) => sum + b.nurseEarnings);
       });
     } catch (e) {
       setState(() {
@@ -131,13 +130,13 @@ class _EarningsScreenState extends State<EarningsScreen> {
                         ],
                       ),
                       const SizedBox(height: 24),
-                      const Text('سجل المعاملات',
+                      const Text('الأرباح بعد خصم عمولة HomeCare',
                           style: TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       Expanded(
                         child: _transactions.isEmpty
-                            ? const Center(child: Text('لا توجد معاملات'))
+                            ? const Center(child: Text('لا توجد أرباح موثقة حتى الآن'))
                             : ListView.builder(
                                 itemCount: _transactions.length,
                                 itemBuilder: (context, index) {
@@ -151,7 +150,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
                                       subtitle: Text(DateFormat.yMMMd()
                                           .format(t.createdAt)),
                                       trailing: Text(
-                                        '+${t.totalAmount.toStringAsFixed(0)} ج.م',
+                                        '+\${t.nurseEarnings.toStringAsFixed(0)} ج.م',
                                         style: const TextStyle(
                                             color: AppColors.success,
                                             fontWeight: FontWeight.bold),
