@@ -10,7 +10,6 @@ class AppUser {
   final bool isActive;
   final bool isVerified;
   final bool profileCompleted;
-  final double balance;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -24,7 +23,6 @@ class AppUser {
     this.isActive = true,
     this.isVerified = false,
     this.profileCompleted = false,
-    this.balance = 0,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -40,7 +38,6 @@ class AppUser {
       'isActive': isActive,
       'isVerified': isVerified,
       'profileCompleted': profileCompleted,
-      'balance': balance,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -61,15 +58,9 @@ class AppUser {
       isVerified: data['isVerified'] is bool ? data['isVerified'] as bool : false,
       profileCompleted:
           data['profileCompleted'] is bool ? data['profileCompleted'] as bool : false,
-      balance: _double(data['balance']),
       createdAt: _date(data['createdAt']),
       updatedAt: _date(data['updatedAt']),
     );
-  }
-
-  static double _double(dynamic value) {
-    if (value is num) return value.toDouble();
-    return double.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   static DateTime _date(dynamic value) {
@@ -84,7 +75,6 @@ class AppUser {
     String? phone,
     String? photoUrl,
     bool? profileCompleted,
-    double? balance,
   }) {
     return AppUser(
       uid: uid,
@@ -96,7 +86,6 @@ class AppUser {
       isActive: isActive,
       isVerified: isVerified,
       profileCompleted: profileCompleted ?? this.profileCompleted,
-      balance: balance ?? this.balance,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );
