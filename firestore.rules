@@ -36,7 +36,7 @@ service cloud.firestore {
       return isAdmin()
         && resource.data.paymentStatus == 'awaiting_verification'
         && request.resource.data.paymentStatus == 'verified'
-        && request.resource.data.status == 'confirmed'
+        && request.resource.data.status == 'completed'
         && request.resource.data.nurseId == resource.data.nurseId
         && request.resource.data.nurseEarnings == resource.data.nurseEarnings
         && request.resource.data.paymentVerifiedBy == request.auth.uid
@@ -139,7 +139,7 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.clientId == request.auth.uid
         && request.resource.data.paymentStatus == 'unpaid'
-        && request.resource.data.status == 'pending_payment'
+        && request.resource.data.status == 'confirmed'
         && request.resource.data.totalAmount > 0
         && request.resource.data.nurseEarnings > 0
         && request.resource.data.platformFee >= 0;
@@ -149,6 +149,7 @@ service cloud.firestore {
       allow update: if signedIn()
         && resource.data.clientId == request.auth.uid
         && resource.data.paymentStatus in ['unpaid', 'rejected']
+        && resource.data.status == 'completed'
         && request.resource.data.paymentStatus == 'awaiting_verification'
         && request.resource.data.nurseId == resource.data.nurseId
         && request.resource.data.clientId == resource.data.clientId
