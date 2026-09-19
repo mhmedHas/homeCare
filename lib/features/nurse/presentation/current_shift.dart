@@ -256,10 +256,14 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
                           const SizedBox(height: 24),
                           if (_isCheckedOut)
                             const Center(
-                                child: Text('تم الانتهاء من الشيفت',
-                                    style: TextStyle(
-                                        color: AppColors.success,
-                                        fontSize: 18))),
+                              child: Text(
+                                'تم الانتهاء من طلب الرعاية',
+                                style: TextStyle(
+                                  color: AppColors.success,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
                           if (!_isCheckedOut && _booking!.status == 'confirmed')
                             SizedBox(
                               width: double.infinity,
@@ -275,23 +279,31 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
                                     : const Text('تسجيل الحضور (Check-in)'),
                               ),
                             ),
-                          if (_isCheckedIn && !_isCheckedOut)
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: _isProcessing ? null : _checkOut,
-                                style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.orange),
-                                child: _isProcessing
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                            color: Colors.white,
-                                            strokeWidth: 2))
-                                    : const Text('تسجيل الانصراف (Check-out)'),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: (_isProcessing || _isCheckedOut) ? null : _checkOut,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange,
+                                foregroundColor: Colors.white,
                               ),
+                              child: _isProcessing
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Text(
+                                      _isCheckedOut
+                                          ? 'تم إتمام طلب الرعاية'
+                                          : 'إتمام طلب الرعاية',
+                                    ),
                             ),
+                          ),
                         ],
                       ),
                     ),
