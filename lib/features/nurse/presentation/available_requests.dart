@@ -42,7 +42,8 @@ class _AvailableRequestsScreenState extends State<AvailableRequestsScreen> {
           .limit(50)
           .get();
       final requests = snapshot.docs.map(CareRequest.fromFirestore).toList();
-      // الأحدث إنشاءً يظهر أولاً، وليس حسب تاريخ بداية الخدمة.\n      requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      // الأحدث إنشاءً يظهر أولاً، وليس حسب تاريخ بداية الخدمة.
+      requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       if (mounted) setState(() { _requests = requests; _loading = false; });
     } catch (_) {
       if (mounted) setState(() { _error = 'تعذر تحميل الطلبات المناسبة لمناطق عملك'; _loading = false; });
@@ -85,7 +86,19 @@ class _AvailableRequestsScreenState extends State<AvailableRequestsScreen> {
             Row(children: [
               CircleAvatar(backgroundColor: AppColors.primaryLight, child: Icon(Icons.person_outline, color: AppColors.primary)),
               const SizedBox(width: 12),
-              Expanded(child: Text(request.patientName.isNotEmpty ? request.patientName : 'صاحب الطلب', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),\n              const SizedBox(width: 8),\n              Container(\n                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),\n                decoration: BoxDecoration(\n                  color: AppColors.primaryLight,\n                  borderRadius: BorderRadius.circular(8),\n                ),\n                child: Text(\n                  '#${request.id.substring(0, request.id.length > 6 ? 6 : request.id.length)}',\n                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),\n                ),\n              ),
+              Expanded(child: Text(request.patientName.isNotEmpty ? request.patientName : 'صاحب الطلب', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '#${request.id.substring(0, request.id.length > 6 ? 6 : request.id.length)}',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                ),
+              ),
               const Icon(Icons.chevron_left),
             ]),
             const SizedBox(height: 12),
