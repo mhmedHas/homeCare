@@ -34,7 +34,6 @@ class AdminService {
     final bookingRef = _db.collection('bookings').doc(bookingId);
 
     return _db.runTransaction<bool>((tx) async {
-      // All reads happen before writes, as required by Firestore transactions.
       final bookingSnap = await tx.get(bookingRef);
 
       if (!bookingSnap.exists) {
@@ -83,6 +82,7 @@ class AdminService {
         {
           'nurseId': nurseId,
           'balance': newBalance,
+          'lastBookingId': bookingId,
           'updatedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
