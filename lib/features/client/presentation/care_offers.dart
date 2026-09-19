@@ -181,7 +181,7 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
           'platformFee': platformFee,
           'totalAmount': base,
           'nurseEarnings': nurseEarnings,
-          'status': 'pending_payment',
+          'status': 'confirmed',
           'paymentStatus': 'unpaid',
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
@@ -200,7 +200,7 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
       }
       if (rejectedCount > 0) await batch.commit();
 
-      if (mounted) context.go('/client/payment/${bookingRef.id}');
+      if (mounted) context.go('/client/booking-confirmation/${bookingRef.id}');
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
