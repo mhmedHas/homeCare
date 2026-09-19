@@ -83,10 +83,30 @@ service cloud.firestore {
       allow get: if isAdmin() || (signedIn() && request.auth.uid == nurseId);
       allow list: if false;
 
-      // Balance changes are allowed only as part of the admin verification
-      // transaction. A nurse cannot write this collection.
+      // The balance can only change together with a verified booking and
+      // its one-time ledger entry in the same transaction.
       allow create, update: if isAdmin()
-        && exists(/databases/$(database)/documents/bookings/$(request.resource.data.get('lastBookingId', '')));
+        && request.resource.data.nurseId == nurseId
+        && request.resource.data.get('lastBookingId', '') != ''
+        && getAfter(
+          /databases/$(database)/documents/bookings/$(request.resource.data.lastBookingId)
+        ).data.paymentStatus == 'verified'
+        && getAfter(
+          /databases/$(database)/documents/bookings/$(request.resource.data.lastBookingId)
+        ).data.nurseId == nurseId
+        && getAfter(
+          /databases/$(database)/documents/nurseTransactions/$(request.resource.data.lastBookingId)
+        ).data.amount
+          == getAfter(
+            /databases/$(database)/documents/bookings/$(request.resource.data.lastBookingId)
+          ).data.nurseEarnings
+        && getAfter(
+          /databases/$(database)/documents/nurseBalances/$(nurseId)
+        ).data.balance
+          == oldBalance(nurseId)
+            + getAfter(
+              /databases/$(database)/documents/bookings/$(request.resource.data.lastBookingId)
+            ).data.nurseEarnings;
 
       allow delete: if false;
     }
@@ -97,16 +117,14 @@ service cloud.firestore {
       allow list: if isAdmin();
 
       allow create: if isAdmin()
+        && request.resource.data.bookingId == transactionId
+        && request.resource.data.amount > 0
         && getAfter(
           /databases/$(database)/documents/bookings/$(request.resource.data.bookingId)
         ).data.paymentStatus == 'verified'
         && getAfter(
           /databases/$(database)/documents/nurseBalances/$(request.resource.data.nurseId)
-        ).data.balance
-          >= get(
-            /databases/$(database)/documents/nurseBalances/$(request.resource.data.nurseId)
-          ).data.get('balance', 0)
-        && request.resource.data.amount > 0;
+        ).data.lastBookingId == request.resource.data.bookingId;
 
       allow update, delete: if false;
     }
