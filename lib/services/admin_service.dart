@@ -32,31 +32,26 @@ class AdminService {
     }
 
     final bookingRef = _db.collection('bookings').doc(bookingId);
-    final booking = await bookingRef.get();
-    if (!booking.exists) {
-      throw StateError('الحجز غير موجود.');
-    }
-
-    final nurseId = booking.data()?['nurseId']?.toString() ?? '';
-    if (nurseId.isEmpty) {
-      throw StateError('بيانات الممرض غير مكتملة.');
-    }
-
-    final nurseRef = _db.collection('users').doc(nurseId);
-    final ledgerRef = _db.collection('nurseTransactions').doc(bookingId);
 
     return _db.runTransaction<bool>((tx) async {
-      // All reads happen before any write, as required by Firestore transactions.
+      // All reads happen before writes, as required by Firestore transactions.
       final bookingSnap = await tx.get(bookingRef);
-      final nurseSnap = await tx.get(nurseRef);
-      final ledgerSnap = await tx.get(ledgerRef);
 
-      if (!bookingSnap.exists || !nurseSnap.exists) {
-        throw StateError('بيانات الحجز أو الممرض غير موجودة.');
+      if (!bookingSnap.exists) {
+        throw StateError('الحجز غير موجود.');
       }
 
       final data = bookingSnap.data() as Map<String, dynamic>;
-      final nurseData = nurseSnap.data() as Map<String, dynamic>;
+      final nurseId = data['nurseId']?.toString() ?? '';
+      if (nurseId.isEmpty) {
+        throw StateError('بيانات الممرض غير مكتملة.');
+      }
+
+      final nurseBalanceRef = _db.collection('nurseBalances').doc(nurseId);
+      final ledgerRef = _db.collection('nurseTransactions').doc(bookingId);
+
+      final balanceSnap = await tx.get(nurseBalanceRef);
+      final ledgerSnap = await tx.get(ledgerRef);
 
       if (data['paymentStatus'] == 'verified' || ledgerSnap.exists) {
         return false;
@@ -71,7 +66,8 @@ class AdminService {
         throw StateError('صافي الممرض غير صالح.');
       }
 
-      final currentBalance = _number(nurseData['balance']);
+      final balanceData = balanceSnap.data() ?? <String, dynamic>{};
+      final currentBalance = _number(balanceData['balance']);
       final newBalance = currentBalance + nurseEarnings;
 
       tx.update(bookingRef, {
@@ -82,10 +78,15 @@ class AdminService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      tx.update(nurseRef, {
-        'balance': newBalance,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      tx.set(
+        nurseBalanceRef,
+        {
+          'nurseId': nurseId,
+          'balance': newBalance,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
 
       tx.set(ledgerRef, {
         'bookingId': bookingId,
