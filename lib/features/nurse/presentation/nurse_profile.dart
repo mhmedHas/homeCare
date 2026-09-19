@@ -62,7 +62,10 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
 
       final results = await Future.wait([
         UserService().getUser(firebaseUser.uid),
-        FirebaseFirestore.instance.collection('nurseProfiles').doc(firebaseUser.uid).get(),
+        FirebaseFirestore.instance
+            .collection('nurseProfiles')
+            .doc(firebaseUser.uid)
+            .get(),
       ]);
 
       final appUser = results[0] as AppUser?;
@@ -173,9 +176,11 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         SetOptions(merge: true),
       );
 
-      final verificationDoc = await db.collection('nurseDocuments').doc(uid).get();
+      final verificationDoc =
+          await db.collection('nurseDocuments').doc(uid).get();
       final verificationData = verificationDoc.data();
-      final licenseUrl = verificationData?['professionalLicenseUrl']?.toString();
+      final licenseUrl =
+          verificationData?['professionalLicenseUrl']?.toString();
 
       if (licenseUrl != null && licenseUrl.isNotEmpty) {
         await db.collection('nurseDocuments').doc(uid).set(
@@ -300,11 +305,6 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
             Icons.payments_outlined,
             'الأرباح',
             () => context.push('/nurse/earnings'),
-          ),
-          _buildMenuItem(
-            Icons.stars_outlined,
-            'Nurse Pro',
-            () => context.push('/nurse/nurse-pro'),
           ),
           _buildMenuItem(
             Icons.star_outline,
