@@ -253,7 +253,9 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 12),
+                          _buildPaymentStatus(),
+                          const SizedBox(height: 12),
                           if (_isCheckedOut)
                             const Center(
                               child: Text(
@@ -307,6 +309,77 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
                         ],
                       ),
                     ),
+    );
+  }
+
+  Widget _buildPaymentStatus() {
+    if (_booking == null) return const SizedBox.shrink();
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('bookings')
+          .doc(_booking!.id)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final status = snapshot.data?.data()?['paymentStatus']?.toString() ??
+            _booking!.paymentStatus;
+
+        Color color;
+        IconData icon;
+        String title;
+        String message;
+
+        switch (status) {
+          case 'verified':
+            color = AppColors.success;
+            icon = Icons.check_circle;
+            title = 'تم الدفع بنجاح';
+            message = 'تم تأكيد مستحقاتك من الإدارة.';
+            break;
+          case 'awaiting_verification':
+            color = Colors.orange;
+            icon = Icons.hourglass_top;
+            title = 'الدفع قيد المراجعة';
+            message = 'تم إرسال إثبات الدفع وينتظر مراجعة الإدارة.';
+            break;
+          case 'rejected':
+            color = Colors.red;
+            icon = Icons.cancel_outlined;
+            title = 'الدفع مرفوض';
+            message = 'العميل يحتاج لإعادة إرسال إثبات الدفع.';
+            break;
+          default:
+            color = Colors.grey;
+            icon = Icons.payments_outlined;
+            title = 'لم يتم الدفع بعد';
+            message = 'سيتم الدفع بعد إتمام طلب الرعاية.';
+        }
+
+        return Card(
+          color: color.withValues(alpha: .10),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Icon(icon, color: color),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: TextStyle(
+                              color: color, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 4),
+                      Text(message),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
