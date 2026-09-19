@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../services/user_service.dart';
 import '../../shared/models/booking.dart';
 
 class EarningsScreen extends StatefulWidget {
@@ -41,7 +40,11 @@ class _EarningsScreenState extends State<EarningsScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw StateError('يرجى تسجيل الدخول');
 
-      final appUser = await UserService().getUser(user.uid);
+      final balanceSnap = await FirebaseFirestore.instance
+          .collection('nurseBalances')
+          .doc(user.uid)
+          .get();
+      final balance = (balanceSnap.data()?['balance'] as num?)?.toDouble() ?? 0;
 
       final snapshot = await FirebaseFirestore.instance
           .collection('bookings')
@@ -60,7 +63,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
       if (!mounted) return;
 
       setState(() {
-        _balance = appUser?.balance ?? 0;
+        _balance = balance;
         _transactions = bookings;
         _totalShifts = completed.length;
         _totalEarnings = completed.fold(0, (sum, b) => sum + b.nurseEarnings);
@@ -107,10 +110,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        _errorMessage!,
-                        style: const TextStyle(color: AppColors.error),
-                      ),
+                      Text(_errorMessage!, style: const TextStyle(color: AppColors.error)),
                       const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed: _loadEarnings,
@@ -165,10 +165,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: _buildSummaryCard(
-                              'عدد الشيفتات',
-                              '${_totalShifts}',
-                            ),
+                            child: _buildSummaryCard('عدد الشيفتات', '${_totalShifts}'),
                           ),
                         ],
                       ),
@@ -206,7 +203,6 @@ class _EarningsScreenState extends State<EarningsScreen> {
                                   final shortId = transaction.id.length > 8
                                       ? transaction.id.substring(0, 8)
                                       : transaction.id;
-
                                   return Card(
                                     margin: const EdgeInsets.symmetric(vertical: 4),
                                     child: ListTile(
