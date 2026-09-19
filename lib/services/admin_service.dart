@@ -71,7 +71,7 @@ class AdminService {
 
       tx.update(bookingRef, {
         'paymentStatus': 'verified',
-        'status': 'confirmed',
+        'status': 'completed',
         'paymentVerifiedAt': FieldValue.serverTimestamp(),
         'paymentVerifiedBy': adminUid,
         'updatedAt': FieldValue.serverTimestamp(),
