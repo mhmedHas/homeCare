@@ -42,7 +42,7 @@ class _AvailableRequestsScreenState extends State<AvailableRequestsScreen> {
           .limit(50)
           .get();
       final requests = snapshot.docs.map(CareRequest.fromFirestore).toList();
-      requests.sort((a, b) => a.startDate.compareTo(b.startDate));
+      // الأحدث إنشاءً يظهر أولاً، وليس حسب تاريخ بداية الخدمة.\n      requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       if (mounted) setState(() { _requests = requests; _loading = false; });
     } catch (_) {
       if (mounted) setState(() { _error = 'تعذر تحميل الطلبات المناسبة لمناطق عملك'; _loading = false; });
@@ -85,7 +85,7 @@ class _AvailableRequestsScreenState extends State<AvailableRequestsScreen> {
             Row(children: [
               CircleAvatar(backgroundColor: AppColors.primaryLight, child: Icon(Icons.person_outline, color: AppColors.primary)),
               const SizedBox(width: 12),
-              Expanded(child: Text('طلب رعاية #${request.id.substring(0, request.id.length > 6 ? 6 : request.id.length)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+              Expanded(child: Text(request.patientName.isNotEmpty ? request.patientName : 'صاحب الطلب', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),\n              const SizedBox(width: 8),\n              Container(\n                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),\n                decoration: BoxDecoration(\n                  color: AppColors.primaryLight,\n                  borderRadius: BorderRadius.circular(8),\n                ),\n                child: Text(\n                  '#${request.id.substring(0, request.id.length > 6 ? 6 : request.id.length)}',\n                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),\n                ),\n              ),
               const Icon(Icons.chevron_left),
             ]),
             const SizedBox(height: 12),
