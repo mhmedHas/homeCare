@@ -23,7 +23,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadBookings();
   }
 
@@ -59,21 +59,24 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     }
   }
 
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
   List<Booking> _bookingsForTab(int index) {
-    switch (index) {
-      case 1:
-        return _bookings.where((b) {
-          return b.status == 'pending_payment' ||
-              b.status == 'confirmed' ||
-              b.status == 'in_progress';
-        }).toList();
-      case 2:
-        return _bookings.where((b) => b.status == 'completed').toList();
-      case 3:
-        return _bookings.where((b) => b.status == 'cancelled').toList();
-      default:
-        return _bookings;
-    }
+    final now = DateTime.now();
+    final result = _bookings.where((b) {
+      if (b.status == 'cancelled') return false;
+      if (index == 0) {
+        return b.shiftEnd.isBefore(now) && b.paymentStatus == 'verified';
+      }
+      if (index == 1) return _sameDay(b.shiftStart, now);
+      return b.shiftStart.isAfter(now);
+    }).toList();
+
+    result.sort((a, b) => index == 0
+        ? b.shiftEnd.compareTo(a.shiftEnd)
+        : a.shiftStart.compareTo(b.shiftStart));
+    return result;
   }
 
   @override
@@ -86,10 +89,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
           controller: _tabController,
           isScrollable: true,
           tabs: const [
-            Tab(text: 'الكل'),
-            Tab(text: 'القادمة'),
-            Tab(text: 'السابقة'),
-            Tab(text: 'الملغاة'),
+            Tab(text: 'منتهية'),
+            Tab(text: 'جارية'),
+            Tab(text: 'قادمة'),
           ],
         ),
       ),
@@ -129,80 +131,178 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       onRefresh: _loadBookings,
       child: TabBarView(
         controller: _tabController,
-        children: List.generate(4, (index) {
+        children: List.generate(3, (index) {
           return _buildList(_bookingsForTab(index));
         }),
       ),
     );
   }
 
-  Widget _buildList(List<Booking> list) {
+  Widget _buildList(List<Booking> list, int tab) {
     if (list.isEmpty) {
+      final titles = ['لا توجد حجوزات منتهية', 'لا توجد حجوزات اليوم', 'لا توجد حجوزات قادمة'];
+      final subtitles = [
+        'الحجوزات التي انتهت وتم تأكيد دفعها ستظهر هنا.',
+        'أي حجز موعده اليوم سيظهر هنا تلقائيًا.',
+        'الحجوزات التي لم يبدأ موعدها بعد ستظهر هنا.',
+      ];
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
-          SizedBox(height: 120),
-          Icon(Icons.event_busy_outlined, size: 60),
-          SizedBox(height: 14),
-          Center(
-            child: Text(
-              'لا توجد حجوزات هنا',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        children: [
+          const SizedBox(height: 90),
+          CircleAvatar(
+            radius: 42,
+            backgroundColor: AppColors.primary.withValues(alpha: 0.10),
+            child: Icon(
+              tab == 0 ? Icons.history_rounded :
+              tab == 1 ? Icons.medical_services_outlined :
+              Icons.event_available_rounded,
+              size: 40,
+              color: AppColors.primary,
             ),
           ),
-          SizedBox(height: 6),
-          Center(child: Text('عند وجود حجز سيظهر هنا.')),
+          const SizedBox(height: 18),
+          Center(child: Text(titles[tab],
+              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800))),
+          const SizedBox(height: 8),
+          Center(child: Text(subtitles[tab], textAlign: TextAlign.center)),
         ],
       );
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       physics: const AlwaysScrollableScrollPhysics(),
       itemCount: list.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final booking = list[index];
+        final now = DateTime.now();
+        final live = tab == 1 &&
+            booking.shiftStart.isBefore(now) &&
+            booking.shiftEnd.isAfter(now) &&
+            booking.status != 'completed';
         final shortId = booking.id.length <= 6
-            ? booking.id
-            : booking.id.substring(0, 6);
+            ? booking.id.toUpperCase()
+            : booking.id.substring(0, 6).toUpperCase();
 
         return Card(
           margin: EdgeInsets.zero,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.65),
+            ),
+          ),
           child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () =>
-                context.push('/client/booking-details/${booking.id}'),
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => context.push('/client/booking-details/' + booking.id),
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Row(
+              child: Column(
                 children: [
-                  const CircleAvatar(
-                    child: Icon(Icons.medical_services_outlined),
+                  Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        child: Icon(Icons.medical_services_outlined,
+                            color: AppColors.primary),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('حجز #' + shortId,
+                                style: const TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 4),
+                            Text(_dateLabel(booking.shiftStart),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                      _StatusBadge(
+                        label: tab == 0 ? 'منتهٍ' :
+                            live ? 'جاري الآن' :
+                            tab == 1 ? 'اليوم' : 'قادم',
+                        color: tab == 0 ? Colors.green :
+                            live ? Colors.orange :
+                            tab == 1 ? Colors.blue : AppColors.primary,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: 15),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
                       children: [
-                        Text(
-                          'حجز #$shortId',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '${DateFormat('dd/MM/yyyy – hh:mm a', 'ar').format(booking.shiftStart)}\n${booking.totalAmount.toStringAsFixed(2)} ج.م',
-                        ),
+                        _InfoItem(Icons.access_time_rounded, 'الموعد',
+                            DateFormat('hh:mm a', 'ar').format(booking.shiftStart) +
+                                ' - ' + DateFormat('hh:mm a', 'ar').format(booking.shiftEnd)),
+                        _InfoDivider(),
+                        _InfoItem(Icons.schedule_rounded, 'المدة',
+                            booking.shiftHours.toString() + ' ساعة'),
+                        _InfoDivider(),
+                        _InfoItem(Icons.payments_outlined, 'الإجمالي',
+                            booking.totalAmount.toStringAsFixed(0) + ' ج.م'),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  _StatusBadge(
-                    label: _getStatusLabel(booking.status),
-                    color: _getStatusColor(booking.status),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(_paymentIcon(booking.paymentStatus), size: 18,
+                          color: _paymentColor(booking.paymentStatus)),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(_paymentLabel(booking.paymentStatus),
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _paymentColor(booking.paymentStatus))),
+                      ),
+                      const Icon(Icons.arrow_back_ios_new_rounded, size: 15),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.chevron_left),
+                  if (tab == 1) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: (live ? Colors.orange : AppColors.primary)
+                            .withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        live
+                            ? '●  الرعاية جارية الآن'
+                            : 'موعد الرعاية اليوم في ' +
+                                DateFormat('hh:mm a', 'ar').format(booking.shiftStart),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: live ? Colors.orange : AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -212,40 +312,40 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     );
   }
 
-  Color _getStatusColor(String status) {
+  String _dateLabel(DateTime date) {
+    final now = DateTime.now();
+    if (_sameDay(date, now)) {
+      return 'اليوم • ' + DateFormat('dd MMMM', 'ar').format(date);
+    }
+    return DateFormat('EEEE • dd MMMM yyyy', 'ar').format(date);
+  }
+
+  IconData _paymentIcon(String status) {
     switch (status) {
-      case 'pending_payment':
-        return Colors.orange;
-      case 'confirmed':
-        return Colors.blue;
-      case 'in_progress':
-        return Colors.purple;
-      case 'completed':
-        return Colors.green;
-      case 'cancelled':
-        return Colors.red;
-      default:
-        return Colors.grey;
+      case 'verified': return Icons.verified_rounded;
+      case 'awaiting_verification': return Icons.hourglass_top_rounded;
+      case 'rejected': return Icons.error_outline_rounded;
+      default: return Icons.payments_outlined;
     }
   }
 
-  String _getStatusLabel(String status) {
+  Color _paymentColor(String status) {
     switch (status) {
-      case 'pending_payment':
-        return 'انتظار الدفع';
-      case 'confirmed':
-        return 'مؤكد';
-      case 'in_progress':
-        return 'جاري';
-      case 'completed':
-        return 'مكتمل';
-      case 'cancelled':
-        return 'ملغي';
-      default:
-        return 'غير معروف';
+      case 'verified': return Colors.green;
+      case 'awaiting_verification': return Colors.orange;
+      case 'rejected': return Colors.red;
+      default: return Colors.grey;
     }
   }
-}
+
+  String _paymentLabel(String status) {
+    switch (status) {
+      case 'verified': return 'تم الدفع وتأكيد العملية';
+      case 'awaiting_verification': return 'الدفع قيد المراجعة';
+      case 'rejected': return 'الدفع مرفوض — راجع تفاصيل الحجز';
+      default: return 'الدفع لم يتم تأكيده بعد';
+    }
+  }
 
 class _StatusBadge extends StatelessWidget {
   final String label;
@@ -271,4 +371,52 @@ class _StatusBadge extends StatelessWidget {
       ),
     );
   }
+}
+class _InfoItem extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+  const _InfoItem(this.icon, this.title, this.value);
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Column(
+      children: [
+        Icon(icon, size: 18, color: AppColors.primary),
+        const SizedBox(height: 4),
+        Text(title, style: TextStyle(fontSize: 10,
+            color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 2),
+        Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+      ],
+    ),
+  );
+}
+
+class _InfoDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 1, height: 34,
+    color: Theme.of(context).colorScheme.outlineVariant,
+  );
+}
+
+class _StatusBadge extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _StatusBadge({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.11),
+      borderRadius: BorderRadius.circular(30),
+    ),
+    child: Text(label, style: TextStyle(
+      color: color, fontSize: 11, fontWeight: FontWeight.w800,
+    )),
+  );
 }
