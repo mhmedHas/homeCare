@@ -1,0 +1,345 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active == true;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function isParticipant(data) {
+      return signedIn()
+        && (data.clientId == request.auth.uid || data.nurseId == request.auth.uid);
+    }
+
+    function oldBalance(nurseId) {
+      let ref = /databases/$(database)/documents/nurseBalances/$(nurseId);
+      return exists(ref) ? get(ref).data.get('balance', 0) : 0;
+    }
+
+    function verifyPaymentTransaction(bookingId) {
+      let balanceRef =
+        /databases/$(database)/documents/nurseBalances/$(request.resource.data.nurseId);
+      let ledgerRef =
+        /databases/$(database)/documents/nurseTransactions/$(bookingId);
+
+      return isAdmin()
+        && resource.data.paymentStatus == 'awaiting_verification'
+        && request.resource.data.paymentStatus == 'verified'
+        && request.resource.data.status == 'confirmed'
+        && request.resource.data.nurseId == resource.data.nurseId
+        && request.resource.data.nurseEarnings == resource.data.nurseEarnings
+        && request.resource.data.paymentVerifiedBy == request.auth.uid
+        && request.resource.data.get('paymentVerifiedAt', null) == request.time
+        && getAfter(balanceRef).data.nurseId == request.resource.data.nurseId
+        && getAfter(balanceRef).data.balance
+            == oldBalance(request.resource.data.nurseId)
+                + request.resource.data.nurseEarnings
+        && getAfter(ledgerRef).data.bookingId == bookingId
+        && getAfter(ledgerRef).data.nurseId == request.resource.data.nurseId
+        && getAfter(ledgerRef).data.amount == request.resource.data.nurseEarnings
+        && getAfter(ledgerRef).data.type == 'earning'
+        && getAfter(ledgerRef).data.paymentStatus == 'verified';
+    }
+
+    match /admins/{uid} {
+      allow get: if isAdmin() && request.auth.uid == uid;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.auth.uid == uid;
+
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name',
+            'phone',
+            'photoUrl',
+            'profileCompleted',
+            'email',
+            'updatedAt'
+          ])
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    match /nurseBalances/{nurseId} {
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == nurseId);
+      allow list: if false;
+
+      // Balance changes are allowed only as part of the admin verification
+      // transaction. A nurse cannot write this collection.
+      allow create, update: if isAdmin()
+        && exists(/databases/$(database)/documents/bookings/$(request.resource.data.get('lastBookingId', '')));
+
+      allow delete: if false;
+    }
+
+    match /nurseTransactions/{transactionId} {
+      allow get: if isAdmin()
+        || (signedIn() && resource.data.nurseId == request.auth.uid);
+      allow list: if isAdmin();
+
+      allow create: if isAdmin()
+        && getAfter(
+          /databases/$(database)/documents/bookings/$(request.resource.data.bookingId)
+        ).data.paymentStatus == 'verified'
+        && getAfter(
+          /databases/$(database)/documents/nurseBalances/$(request.resource.data.nurseId)
+        ).data.balance
+          >= get(
+            /databases/$(database)/documents/nurseBalances/$(request.resource.data.nurseId)
+          ).data.get('balance', 0)
+        && request.resource.data.amount > 0;
+
+      allow update, delete: if false;
+    }
+
+    match /bookings/{bookingId} {
+      allow get: if isAdmin() || isParticipant(resource.data);
+
+      allow list: if isAdmin()
+        || (signedIn() && resource.data.clientId == request.auth.uid)
+        || (signedIn() && resource.data.nurseId == request.auth.uid);
+
+      allow create: if signedIn()
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.paymentStatus == 'unpaid'
+        && request.resource.data.status == 'pending_payment'
+        && request.resource.data.totalAmount > 0
+        && request.resource.data.nurseEarnings > 0
+        && request.resource.data.platformFee >= 0;
+
+      // Client can submit/re-submit a payment report, but can never set it
+      // to verified or change the financial fields.
+      allow update: if signedIn()
+        && resource.data.clientId == request.auth.uid
+        && resource.data.paymentStatus in ['unpaid', 'rejected']
+        && request.resource.data.paymentStatus == 'awaiting_verification'
+        && request.resource.data.nurseId == resource.data.nurseId
+        && request.resource.data.clientId == resource.data.clientId
+        && request.resource.data.totalAmount == resource.data.totalAmount
+        && request.resource.data.platformFee == resource.data.platformFee
+        && request.resource.data.nurseEarnings == resource.data.nurseEarnings
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'paymentStatus',
+          'paymentMethod',
+          'paymentReference',
+          'paymentSubmittedAt',
+          'updatedAt'
+        ])
+        && request.resource.data.paymentMethod in ['wallet', 'instapay']
+        && request.resource.data.get('paymentSubmittedAt', null) == request.time
+
+        || verifyPaymentTransaction(bookingId)
+
+        || (
+          isAdmin()
+          && resource.data.paymentStatus == 'awaiting_verification'
+          && request.resource.data.paymentStatus == 'rejected'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'paymentStatus',
+            'paymentRejectedAt',
+            'paymentRejectedBy',
+            'paymentRejectionReason',
+            'updatedAt'
+          ])
+          && request.resource.data.paymentRejectedBy == request.auth.uid
+          && request.resource.data.get('paymentRejectedAt', null) == request.time
+        )
+
+        || (
+          signedIn()
+          && resource.data.nurseId == request.auth.uid
+          && request.resource.data.nurseId == resource.data.nurseId
+          && request.resource.data.clientId == resource.data.clientId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status',
+            'updatedAt'
+          ])
+          && request.resource.data.status in ['in_progress', 'completed']
+        );
+
+      allow delete: if false;
+    }
+
+    match /careRequests/{requestId} {
+      allow read: if isAdmin()
+        || (signedIn() && (
+          resource.data.clientId == request.auth.uid
+          || resource.data.status == 'open'
+        ));
+
+      allow create: if signedIn()
+        && request.resource.data.clientId == request.auth.uid;
+
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && resource.data.clientId == request.auth.uid
+          && request.resource.data.clientId == resource.data.clientId
+        );
+
+      allow delete: if isAdmin()
+        || (signedIn() && resource.data.clientId == request.auth.uid);
+    }
+
+    match /careOffers/{offerId} {
+      allow read: if isAdmin()
+        || (
+          signedIn()
+          && (
+            resource.data.nurseId == request.auth.uid
+            || get(
+              /databases/$(database)/documents/careRequests/$(resource.data.requestId)
+            ).data.clientId == request.auth.uid
+          )
+        );
+
+      allow create: if signedIn()
+        && request.resource.data.nurseId == request.auth.uid;
+
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && resource.data.nurseId == request.auth.uid
+          && request.resource.data.nurseId == resource.data.nurseId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status',
+            'updatedAt'
+          ])
+        )
+        || (
+          signedIn()
+          && get(
+            /databases/$(database)/documents/careRequests/$(resource.data.requestId)
+          ).data.clientId == request.auth.uid
+          && request.resource.data.requestId == resource.data.requestId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status',
+            'updatedAt'
+          ])
+        );
+
+      allow delete: if false;
+    }
+
+    match /chats/{chatId} {
+      allow get: if isAdmin()
+        || (
+          signedIn()
+          && (
+            resource.data.clientId == request.auth.uid
+            || resource.data.nurseId == request.auth.uid
+          )
+        );
+
+      allow list: if isAdmin()
+        || (
+          signedIn()
+          && (
+            resource.data.clientId == request.auth.uid
+            || resource.data.nurseId == request.auth.uid
+          )
+        );
+
+      allow create: if signedIn()
+        && (
+          request.resource.data.clientId == request.auth.uid
+          || request.resource.data.nurseId == request.auth.uid
+        );
+
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && (
+            resource.data.clientId == request.auth.uid
+            || resource.data.nurseId == request.auth.uid
+          )
+          && request.resource.data.clientId == resource.data.clientId
+          && request.resource.data.nurseId == resource.data.nurseId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'lastMessage',
+            'lastMessageTime',
+            'updatedAt',
+            'unreadForClient',
+            'unreadForNurse'
+          ])
+        );
+
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if isAdmin()
+          || (
+            signedIn()
+            && (
+              get(/databases/$(database)/documents/chats/$(chatId)).data.clientId == request.auth.uid
+              || get(/databases/$(database)/documents/chats/$(chatId)).data.nurseId == request.auth.uid
+            )
+          );
+
+        allow create: if signedIn()
+          && request.resource.data.senderId == request.auth.uid
+          && (
+            request.resource.data.receiverId
+              == get(/databases/$(database)/documents/chats/$(chatId)).data.clientId
+            || request.resource.data.receiverId
+              == get(/databases/$(database)/documents/chats/$(chatId)).data.nurseId
+          );
+
+        allow update: if signedIn()
+          && request.resource.data.receiverId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seen'])
+          && request.resource.data.seen == true;
+
+        allow delete: if false;
+      }
+    }
+
+    match /nurseProfiles/{nurseId} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin()
+        || (signedIn() && request.auth.uid == nurseId);
+      allow delete: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.bookingId == reviewId
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && get(
+          /databases/$(database)/documents/bookings/$(reviewId)
+        ).data.clientId == request.auth.uid
+        && get(
+          /databases/$(database)/documents/bookings/$(reviewId)
+        ).data.nurseId == request.resource.data.nurseId
+        && get(
+          /databases/$(database)/documents/bookings/$(reviewId)
+        ).data.status == 'completed'
+        && !exists(/databases/$(database)/documents/reviews/$(reviewId));
+
+      allow update, delete: if false;
+    }
+  }
+}
