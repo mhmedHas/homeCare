@@ -11,6 +11,7 @@ import '../../features/client/presentation/client_home.dart';
 import '../../features/client/presentation/create_care_request.dart';
 import '../../features/client/presentation/request_details.dart';
 import '../../features/client/presentation/nurse_results_screen.dart';
+import '../../features/client/presentation/smart_match.dart';
 import '../../features/client/presentation/nurse_profile.dart';
 import '../../features/client/presentation/booking_confirmation.dart';
 import '../../features/client/presentation/booking_details.dart';
@@ -87,6 +88,13 @@ final GoRouter appRouter = GoRouter(
         GoRoute(
           path: '/client/request-offers/:id',
           builder: (_, s) => CareOffersScreen(
+            requestId: s.pathParameters['id']!,
+            highlightOfferId: s.uri.queryParameters['highlightOfferId'],
+          ),
+        ),
+        GoRoute(
+          path: '/client/smart-match/:id',
+          builder: (_, s) => SmartMatchScreen(
             requestId: s.pathParameters['id']!,
           ),
         ),
