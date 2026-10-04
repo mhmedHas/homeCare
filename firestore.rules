@@ -223,15 +223,20 @@ service cloud.firestore {
             'cancelledAt',
             'updatedAt'
           ])
-          && getAfter(
-            /databases/$(database)/documents/careRequests/$(resource.data.careRequestId)
-          ).data.status == 'open'
-          && getAfter(
-            /databases/$(database)/documents/careRequests/$(resource.data.careRequestId)
-          ).data.get('selectedNurseId', null) == null
-          && getAfter(
-            /databases/$(database)/documents/careRequests/$(resource.data.careRequestId)
-          ).data.get('selectedOfferId', null) == null
+          && (
+            resource.data.get('bookingType', '') == 'direct_nurse_hire'
+            || (
+              getAfter(
+                /databases/$(database)/documents/careRequests/$(resource.data.careRequestId)
+              ).data.status == 'open'
+              && getAfter(
+                /databases/$(database)/documents/careRequests/$(resource.data.careRequestId)
+              ).data.get('selectedNurseId', null) == null
+              && getAfter(
+                /databases/$(database)/documents/careRequests/$(resource.data.careRequestId)
+              ).data.get('selectedOfferId', null) == null
+            )
+          )
         )
 
         || (
