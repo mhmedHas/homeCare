@@ -165,8 +165,6 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         : (_nurse!.photoUrl?.trim() ?? '');
     final stats = _stats ?? const NurseProfileStats(
           completedBookings: 0,
-          onTimeRate: 0,
-          averageResponseMinutes: 0,
         );
 
     return ListView(
@@ -325,22 +323,9 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('الأداء والموثوقية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('إحصائيات الممرض', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: _metricCard(Icons.task_alt, 'حجوزات مكتملة', stats.completedBookings.toString())),
-                const SizedBox(width: 8),
-                Expanded(child: _metricCard(Icons.schedule, 'الالتزام بالمواعيد', stats.onTimeRateLabel)),
-                const SizedBox(width: 8),
-                Expanded(child: _metricCard(Icons.bolt, 'متوسط الاستجابة', stats.responseTimeLabel)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'نسبة الالتزام تُحسب من أوقات تسجيل الحضور الفعلية، ومتوسط الاستجابة من وقت إنشاء طلب الرعاية حتى إرسال العرض.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
-            ),
+            _metricCard(Icons.task_alt, 'حجوزات مكتملة', stats.completedBookings.toString()),
           ],
         ),
       ),
