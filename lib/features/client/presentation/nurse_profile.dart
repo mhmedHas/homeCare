@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../services/nurse_profile_stats_service.dart';
 import '../../../services/user_service.dart';
 import '../../shared/models/app_user.dart';
 
@@ -9,7 +10,11 @@ class NurseProfileScreen extends StatefulWidget {
   final String nurseId;
   final String requestId;
 
-  const NurseProfileScreen({super.key, required this.nurseId, required this.requestId});
+  const NurseProfileScreen({
+    super.key,
+    required this.nurseId,
+    required this.requestId,
+  });
 
   @override
   State<NurseProfileScreen> createState() => _NurseProfileScreenState();
@@ -18,7 +23,9 @@ class NurseProfileScreen extends StatefulWidget {
 class _NurseProfileScreenState extends State<NurseProfileScreen> {
   AppUser? _nurse;
   Map<String, dynamic> _profile = {};
+  Map<String, dynamic> _verification = {};
   List<Map<String, dynamic>> _reviews = [];
+  NurseProfileStats? _stats;
   bool _loading = true;
   String? _error;
 
@@ -30,27 +37,83 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
 
   Future<void> _load() async {
     if (mounted) setState(() => _loading = true);
+
     try {
       final db = FirebaseFirestore.instance;
-      final nurse = await UserService().getUser(widget.nurseId);
-      if (nurse == null || nurse.role != 'nurse') throw StateError('not_nurse');
-      final profileDoc = await db.collection('nurseProfiles').doc(widget.nurseId).get();
-      final reviewsSnap = await db.collection('reviews').where('nurseId', isEqualTo: widget.nurseId).limit(20).get();
-      final reviews = reviewsSnap.docs.map((doc) => <String, dynamic>{...doc.data(), '_id': doc.id}).toList();
+      final results = await Future.wait([
+        UserService().getUser(widget.nurseId),
+        db.collection('nurseProfiles').doc(widget.nurseId).get(),
+        db.collection('nurseDocuments').doc(widget.nurseId).get(),
+        NurseProfileStatsService().getStats(widget.nurseId),
+        db.collection('reviews').where('nurseId', isEqualTo: widget.nurseId).limit(50).get(),
+      ]);
+
+      final nurse = results[0] as AppUser?;
+      final profileDoc = results[1] as DocumentSnapshot<Map<String, dynamic>>;
+      final verificationDoc = results[2] as DocumentSnapshot<Map<String, dynamic>>;
+      final stats = results[3] as NurseProfileStats;
+      final reviewSnap = results[4] as QuerySnapshot<Map<String, dynamic>>;
+
+      if (nurse == null || nurse.role != 'nurse') {
+        throw StateError('not_nurse');
+      }
+
+      final reviews = reviewSnap.docs
+          .map((doc) => <String, dynamic>{...doc.data(), '_id': doc.id})
+          .toList();
       reviews.sort((a, b) {
-        final aDate = (a['createdAt'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final bDate = (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final aDate = _timestamp(a['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate = _timestamp(b['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(0);
         return bDate.compareTo(aDate);
       });
+
       if (!mounted) return;
       setState(() {
         _nurse = nurse;
         _profile = profileDoc.data() ?? {};
+        _verification = verificationDoc.data() ?? {};
+        _stats = stats;
         _reviews = reviews;
+        _error = null;
         _loading = false;
       });
     } catch (_) {
-      if (mounted) setState(() { _error = 'تعذر تحميل ملف الممرض'; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _error = 'تعذر تحميل ملف الممرض';
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  DateTime? _timestamp(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
+
+  List<String> _listField(String key, {String fallbackKey = ''}) {
+    final primary = _profile[key];
+    final value = primary is List ? primary : (fallbackKey.isNotEmpty ? _profile[fallbackKey] : null);
+    if (value is! List) return [];
+    return value.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toSet().toList();
+  }
+
+  bool get _verified =>
+      _nurse?.isVerified == true ||
+      _profile['isVerified'] == true ||
+      _verification['verificationStatus']?.toString() == 'approved';
+
+  String get _genderLabel {
+    switch (_profile['gender']?.toString()) {
+      case 'male':
+        return 'ذكر';
+      case 'female':
+        return 'أنثى';
+      default:
+        return 'غير محدد';
     }
   }
 
@@ -58,144 +121,365 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('ملف الممرض')),
-      body: _loading ? const Center(child: CircularProgressIndicator()) : _error != null || _nurse == null ? _errorState() : _buildProfile(),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null || _nurse == null
+              ? _errorState()
+              : _buildProfile(),
     );
   }
 
   Widget _errorState() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.person_off_outlined, size: 56),
-        const SizedBox(height: 12),
-        Text(_error ?? 'الممرض غير موجود', textAlign: TextAlign.center),
-        const SizedBox(height: 16),
-        FilledButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة')),
-      ]),
-    ),
-  );
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.person_off_outlined, size: 56),
+              const SizedBox(height: 12),
+              Text(_error ?? 'الممرض غير موجود', textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh),
+                label: const Text('إعادة المحاولة'),
+              ),
+            ],
+          ),
+        ),
+      );
 
   Widget _buildProfile() {
-    final services = _profile['services'] is List ? (_profile['services'] as List).map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList() : <String>[];
-    final areas = _profile['preferredGovernorates'] is List ? (_profile['preferredGovernorates'] as List).map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList() : <String>[];
-    final experience = _profile['experienceYears']?.toString() ?? 'غير محدد';
-    final specialization = _profile['specialization']?.toString() ?? 'تمريض';
-    final verified = _nurse!.isVerified;
+    final services = _listField('skills', fallbackKey: 'services');
+    final governorates = _listField('preferredGovernorates');
+    final workAreas = _listField('workAreas');
+    final experience = (_profile['experienceYears'] as num?)?.toInt() ?? 0;
+    final specialization = _profile['specialization']?.toString().trim();
     final average = (_profile['averageRating'] as num?)?.toDouble() ?? 0;
     final total = (_profile['totalReviews'] as num?)?.toInt() ?? 0;
-    final distribution = Map<String, dynamic>.from((_profile['ratingDistribution'] as Map?)?.map((k, v) => MapEntry(k.toString(), v)) ?? {});
-    final profilePhoto = _profile['photoUrl']?.toString().trim() ?? '';
-    final userPhoto = _nurse!.photoUrl?.trim() ?? '';
-    final photoUrl = profilePhoto.isNotEmpty ? profilePhoto : userPhoto;
+    final distribution = Map<String, dynamic>.from(
+      (_profile['ratingDistribution'] as Map?)?.map((k, v) => MapEntry(k.toString(), v)) ?? {},
+    );
+    final photo = (_profile['photoUrl']?.toString().trim().isNotEmpty == true)
+        ? _profile['photoUrl'].toString().trim()
+        : (_nurse!.photoUrl?.trim() ?? '');
+    final stats = _stats ?? const NurseProfileStats(
+          completedBookings: 0,
+          onTimeRate: 0,
+          averageResponseMinutes: 0,
+        );
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
-        Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(children: [
-          _NurseProfileAvatar(url: photoUrl, name: _nurse!.name),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                _NurseProfileAvatar(url: photo, name: _nurse!.name),
+                const SizedBox(height: 12),
+                Text(
+                  _nurse!.name,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                if (_verified)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: .10),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.verified, color: AppColors.success, size: 18),
+                        SizedBox(width: 6),
+                        Text('موثق من شفاء', style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _statChip(Icons.medical_services_outlined, specialization?.isNotEmpty == true ? specialization! : 'تمريض'),
+                    _statChip(Icons.workspace_premium_outlined, '$experience سنة خبرة'),
+                    _statChip(_profile['gender'] == 'female' ? Icons.female : Icons.male, _genderLabel),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _buildRatingCard(average, total, distribution),
+        const SizedBox(height: 12),
+        _buildPerformanceCard(stats),
+        if (governorates.isNotEmpty || workAreas.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Text(_nurse!.name, style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
-          if (verified) ...[
-            const SizedBox(height: 6),
-            const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(Icons.verified, color: AppColors.success, size: 19),
-              SizedBox(width: 5),
-              Text('ممرض موثق', style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w700)),
-            ]),
-          ],
-          const SizedBox(height: 16),
-          Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, children: [
-            _stat(Icons.medical_services_outlined, specialization),
-            _stat(Icons.workspace_premium_outlined, '$experience سنوات خبرة'),
-          ]),
-        ]))),
-        const SizedBox(height: 12),
-        Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(children: [
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text(average > 0 ? average.toStringAsFixed(1) : '—', style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w800)),
-            const SizedBox(width: 10),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: List.generate(5, (i) => Icon(i < average.round() ? Icons.star : Icons.star_border, color: AppColors.primary, size: 22))),
-              const SizedBox(height: 3),
-              Text('$total تقييم', style: const TextStyle(color: AppColors.textSecondary)),
-            ]),
-          ]),
-          const SizedBox(height: 16),
-          for (var stars = 5; stars >= 1; stars--) _ratingRow(stars, (distribution['$stars'] as num?)?.toInt() ?? 0, total),
-        ]))),
-        const SizedBox(height: 12),
-        if (areas.isNotEmpty) _section('محافظات العمل', Icons.location_on_outlined, Wrap(spacing: 8, runSpacing: 8, children: areas.map((area) => Chip(label: Text(area))).toList())),
+          _section(
+            'نطاق العمل',
+            Icons.location_on_outlined,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (governorates.isNotEmpty) ...[
+                  const Text('المحافظات', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, runSpacing: 8, children: governorates.map((e) => Chip(label: Text(e))).toList()),
+                ],
+                if (workAreas.isNotEmpty) ...[
+                  if (governorates.isNotEmpty) const SizedBox(height: 14),
+                  const Text('المناطق', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, runSpacing: 8, children: workAreas.map((e) => Chip(label: Text(e))).toList()),
+                ],
+              ],
+            ),
+          ),
+        ],
         if (services.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _section('الخدمات المقدمة', Icons.volunteer_activism_outlined, Wrap(spacing: 8, runSpacing: 8, children: services.map((service) => Chip(label: Text(service))).toList())),
+          _section(
+            'المهارات والخدمات',
+            Icons.volunteer_activism_outlined,
+            Wrap(spacing: 8, runSpacing: 8, children: services.map((e) => Chip(label: Text(e))).toList()),
+          ),
         ],
         const SizedBox(height: 12),
         _reviewsSection(),
         const SizedBox(height: 18),
-        SizedBox(height: 52, child: FilledButton.icon(
-          onPressed: widget.requestId.isEmpty ? null : () => context.go('/client/request-offers/${widget.requestId}'),
-          icon: const Icon(Icons.check_circle_outline),
-          label: const Text('العودة لعروض الطلب واختيار الممرض'),
-        )),
+        SizedBox(
+          height: 52,
+          child: FilledButton.icon(
+            onPressed: widget.requestId.isEmpty
+                ? null
+                : () => context.go('/client/request-offers/${widget.requestId}'),
+            icon: const Icon(Icons.check_circle_outline),
+            label: const Text('العودة لعروض الطلب واختيار الممرض'),
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _buildRatingCard(
+    double average,
+    int total,
+    Map<String, dynamic> distribution,
+  ) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  average > 0 ? average.toStringAsFixed(1) : '—',
+                  style: const TextStyle(fontSize: 38, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: List.generate(
+                        5,
+                        (i) => Icon(
+                          i + 1 <= average.round() ? Icons.star : Icons.star_border,
+                          color: AppColors.primary,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text('$total تقييم', style: const TextStyle(color: AppColors.textSecondary)),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            for (var stars = 5; stars >= 1; stars--)
+              _ratingRow(
+                stars,
+                (distribution['$stars'] as num?)?.toInt() ?? 0,
+                total,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPerformanceCard(NurseProfileStats stats) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('الأداء والموثوقية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: _metricCard(Icons.task_alt, 'حجوزات مكتملة', stats.completedBookings.toString())),
+                const SizedBox(width: 8),
+                Expanded(child: _metricCard(Icons.schedule, 'الالتزام بالمواعيد', stats.onTimeRateLabel)),
+                const SizedBox(width: 8),
+                Expanded(child: _metricCard(Icons.bolt, 'متوسط الاستجابة', stats.responseTimeLabel)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'نسبة الالتزام تُحسب من أوقات تسجيل الحضور الفعلية، ومتوسط الاستجابة من وقت إنشاء طلب الرعاية حتى إرسال العرض.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _metricCard(IconData icon, String title, String value) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: .06),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: AppColors.primary, size: 22),
+          const SizedBox(height: 6),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16), textAlign: TextAlign.center),
+          const SizedBox(height: 3),
+          Text(title, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary), textAlign: TextAlign.center),
+        ],
+      ),
     );
   }
 
   Widget _ratingRow(int stars, int count, int total) {
     final fraction = total == 0 ? 0.0 : count / total;
-    return Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(children: [
-      SizedBox(width: 18, child: Text('$stars', textAlign: TextAlign.center)),
-      const Icon(Icons.star, size: 16, color: AppColors.primary),
-      const SizedBox(width: 8),
-      Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(8), child: LinearProgressIndicator(value: fraction, minHeight: 7))),
-      const SizedBox(width: 8),
-      SizedBox(width: 28, child: Text('$count', textAlign: TextAlign.end, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary))),
-    ]));
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          SizedBox(width: 18, child: Text('$stars', textAlign: TextAlign.center)),
+          const Icon(Icons.star, size: 16, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(value: fraction, minHeight: 7),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(width: 28, child: Text('$count', textAlign: TextAlign.end, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+        ],
+      ),
+    );
   }
 
   Widget _reviewsSection() {
     if (_reviews.isEmpty) {
-      return Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(children: const [
-        Icon(Icons.rate_review_outlined, size: 40),
-        SizedBox(height: 8),
-        Text('لا توجد تقييمات بعد', style: TextStyle(fontWeight: FontWeight.bold)),
-        SizedBox(height: 4),
-        Text('ستظهر تقييمات العملاء هنا بعد انتهاء الحجوزات.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary)),
-      ])));
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            children: const [
+              Icon(Icons.rate_review_outlined, size: 40),
+              SizedBox(height: 8),
+              Text('لا توجد تقييمات بعد', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              Text('ستظهر تقييمات العملاء هنا بعد انتهاء الحجوزات.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary)),
+            ],
+          ),
+        ),
+      );
     }
-    return Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('آخر التقييمات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-      const SizedBox(height: 12),
-      ..._reviews.take(5).map((review) {
-        final stars = (review['rating'] as num?)?.toInt() ?? 0;
-        final comment = review['comment']?.toString().trim() ?? '';
-        final date = (review['createdAt'] as Timestamp?)?.toDate();
-        return Padding(padding: const EdgeInsets.only(bottom: 14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            ...List.generate(5, (i) => Icon(i < stars ? Icons.star : Icons.star_border, size: 18, color: AppColors.primary)),
-            const Spacer(),
-            if (date != null) Text('${date.day}/${date.month}/${date.year}', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-          ]),
-          if (comment.isNotEmpty) ...[const SizedBox(height: 6), Text(comment)],
-          const Divider(height: 18),
-        ]));
-      }),
-    ])));
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('آخر التقييمات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            ..._reviews.take(5).map((review) {
+              final stars = (review['rating'] as num?)?.toInt() ?? 0;
+              final comment = review['comment']?.toString().trim() ?? '';
+              final date = _timestamp(review['createdAt']);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        ...List.generate(5, (i) => Icon(i < stars ? Icons.star : Icons.star_border, size: 18, color: AppColors.primary)),
+                        const Spacer(),
+                        if (date != null) Text('${date.day}/${date.month}/${date.year}', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                      ],
+                    ),
+                    if (comment.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(comment),
+                    ],
+                    const Divider(height: 18),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
   }
 
-  Widget _stat(IconData icon, String text) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-    decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.07), borderRadius: BorderRadius.circular(12)),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 18, color: AppColors.primary), const SizedBox(width: 6), Text(text)]),
-  );
+  Widget _statChip(IconData icon, String text) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: AppColors.primary),
+            const SizedBox(width: 6),
+            Text(text),
+          ],
+        ),
+      );
 
   Widget _section(String title, IconData icon, Widget content) => Card(
-    child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [Icon(icon, color: AppColors.primary), const SizedBox(width: 8), Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold))]),
-      const SizedBox(height: 12),
-      content,
-    ])),
-  );
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              content,
+            ],
+          ),
+        ),
+      );
 }
 
 class _NurseProfileAvatar extends StatelessWidget {
@@ -208,7 +492,14 @@ class _NurseProfileAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final fallback = name.trim().isNotEmpty ? name.trim()[0] : '?';
     if (url.isEmpty) {
-      return CircleAvatar(radius: 52, backgroundColor: AppColors.primaryLight, child: Text(fallback, style: const TextStyle(fontSize: 38, color: AppColors.primary, fontWeight: FontWeight.bold)));
+      return CircleAvatar(
+        radius: 52,
+        backgroundColor: AppColors.primaryLight,
+        child: Text(
+          fallback,
+          style: const TextStyle(fontSize: 38, color: AppColors.primary, fontWeight: FontWeight.bold),
+        ),
+      );
     }
     return ClipOval(
       child: SizedBox(
