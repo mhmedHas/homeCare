@@ -262,7 +262,7 @@ service cloud.firestore {
           ).data.status == 'cancelled'
           && getAfter(
             /databases/$(database)/documents/bookings/$(request.resource.data.reopenedFromBookingId)
-          ).data.careRequestId == resource.id
+          ).data.careRequestId == requestId
         );
 
       allow delete: if isAdmin()
