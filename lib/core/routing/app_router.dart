@@ -11,6 +11,8 @@ import '../../features/client/presentation/client_home.dart';
 import '../../features/client/presentation/create_care_request.dart';
 import '../../features/client/presentation/request_details.dart';
 import '../../features/client/presentation/nurse_results_screen.dart';
+import '../../features/client/presentation/direct_nurse_matching.dart';
+import '../../features/client/presentation/direct_nurse_booking.dart';
 import '../../features/client/presentation/nurse_profile.dart';
 import '../../features/client/presentation/booking_confirmation.dart';
 import '../../features/client/presentation/booking_details.dart';
@@ -75,6 +77,10 @@ final GoRouter appRouter = GoRouter(
           builder: (_, __) => const CreateCareRequestScreen(),
         ),
         GoRoute(
+          path: '/client/direct-nurse-matching',
+          builder: (_, __) => const DirectNurseMatchingScreen(),
+        ),
+        GoRoute(
           path: '/client/my-requests',
           builder: (_, __) => const MyRequestsScreen(),
         ),
@@ -127,6 +133,18 @@ final GoRouter appRouter = GoRouter(
           path: '/client/chat/:id',
           builder: (_, s) => ChatScreen(
             bookingId: s.pathParameters['id']!,
+          ),
+        ),
+        GoRoute(
+          path: '/client/direct-chat/:nurseId',
+          builder: (_, s) => ChatScreen(
+            directNurseId: s.pathParameters['nurseId']!,
+          ),
+        ),
+        GoRoute(
+          path: '/client/direct-booking/:nurseId',
+          builder: (_, s) => DirectNurseBookingScreen(
+            nurseId: s.pathParameters['nurseId']!,
           ),
         ),
         GoRoute(
