@@ -160,6 +160,8 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
     final workAreas = _listField('workAreas');
     final experience = (_profile['experienceYears'] as num?)?.toInt() ?? 0;
     final specialization = _profile['specialization']?.toString().trim();
+    final shiftPrice = (_profile['expectedPrice'] as num?)?.toDouble() ?? 0;
+    final shiftHours = (_profile['shiftHours'] as num?)?.toInt() ?? 12;
     final average = (_profile['averageRating'] as num?)?.toDouble() ?? 0;
     final total = (_profile['totalReviews'] as num?)?.toInt() ?? 0;
     final distribution = Map<String, dynamic>.from(
@@ -213,6 +215,11 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
                     _statChip(Icons.medical_services_outlined, specialization?.isNotEmpty == true ? specialization! : 'تمريض'),
                     _statChip(Icons.workspace_premium_outlined, '$experience سنة خبرة'),
                     _statChip(_profile['gender'] == 'female' ? Icons.female : Icons.male, _genderLabel),
+                    if (shiftPrice > 0)
+                      _statChip(
+                        Icons.payments_outlined,
+                        shiftPrice.toStringAsFixed(0) + ' ج.م / ' + shiftHours.toString() + ' ساعة',
+                      ),
                   ],
                 ),
               ],
