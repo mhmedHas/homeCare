@@ -115,13 +115,6 @@ class BookingService {
       throw StateError('بيانات الحجز غير مكتملة.');
     }
 
-    final onHoldOffers = await db
-        .collection('careOffers')
-        .where('requestId', isEqualTo: requestId)
-        .where('status', isEqualTo: 'on_hold')
-        .limit(100)
-        .get();
-
     final requestRef = db.collection('careRequests').doc(requestId);
     final lockRef = db.collection('nurseBookingLocks').doc(nurseId);
 
@@ -178,14 +171,6 @@ class BookingService {
       if (selectedOfferId.isNotEmpty) {
         tx.update(db.collection('careOffers').doc(selectedOfferId), {
           'status': 'cancelled',
-          'reopenedFromBookingId': bookingId,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      for (final offer in onHoldOffers.docs) {
-        tx.update(offer.reference, {
-          'status': 'pending',
           'reopenedFromBookingId': bookingId,
           'updatedAt': FieldValue.serverTimestamp(),
         });
