@@ -101,6 +101,12 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
+                        _buildInfoRow(
+                          'نوع الحجز',
+                          booking.bookingType == 'direct_nurse_hire'
+                              ? 'توظيف مباشر للممرض'
+                              : 'طلب رعاية',
+                        ),
                         _buildInfoRow('رقم الحجز', _shortId(booking.id)),
                         _buildInfoRow('التاريخ', DateFormat.yMMMd('ar').format(booking.shiftStart)),
                         _buildInfoRow('الوقت', DateFormat.jm('ar').format(booking.shiftStart)),
@@ -148,7 +154,18 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                         'تم إعادة فتح طلب الرعاية. يمكنك اختيار ممرض آخر من العروض السابقة.',
                     buttonText: 'اختيار ممرض آخر',
                     onPressed: () => context
-                        .go('/client/request-offers/${booking.careRequestId}'),
+                        .go('/client/request-offers/' + booking.careRequestId),
+                  ),
+                if (booking.status == 'cancelled' &&
+                    booking.bookingType == 'direct_nurse_hire')
+                  _buildActionCard(
+                    icon: Icons.search,
+                    color: Colors.orange,
+                    title: 'الممرض ألغى الحجز المباشر',
+                    message:
+                        'يمكنك البحث مرة أخرى واختيار ممرض آخر من نظام التوظيف المباشر.',
+                    buttonText: 'البحث عن ممرض آخر',
+                    onPressed: () => context.go('/client/direct-nurse-matching'),
                   ),
                 if (booking.status != 'completed' &&
                     booking.status != 'cancelled')
