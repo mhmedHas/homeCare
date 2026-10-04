@@ -216,9 +216,18 @@ service cloud.firestore {
           && request.resource.data.clientId == resource.data.clientId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'status',
+            'checkInAt',
             'updatedAt'
           ])
           && request.resource.data.status in ['in_progress', 'completed']
+          && (
+            request.resource.data.status == 'completed'
+            || (
+              request.resource.data.status == 'in_progress'
+              && resource.data.status == 'confirmed'
+              && request.resource.data.get('checkInAt', null) == request.time
+            )
+          )
         );
 
       allow delete: if false;
