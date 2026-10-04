@@ -45,6 +45,89 @@ class BookingService {
     return docRef.id;
   }
 
+  Future<String> createDirectBooking({
+    required String clientId,
+    required String nurseId,
+    required DateTime shiftStart,
+  }) async {
+    final db = FirebaseFirestore.instance;
+    final bookingRef = _bookingsCollection.doc();
+    final profileRef = db.collection('nurseProfiles').doc(nurseId);
+    final userRef = db.collection('users').doc(nurseId);
+    final lockRef = db.collection('nurseBookingLocks').doc(nurseId);
+
+    await db.runTransaction((tx) async {
+      final profileSnap = await tx.get(profileRef);
+      final userSnap = await tx.get(userRef);
+      final lockSnap = await tx.get(lockRef);
+
+      if (!profileSnap.exists || !userSnap.exists) {
+        throw StateError('بيانات الممرض غير موجودة.');
+      }
+
+      final profile = profileSnap.data()!;
+      final user = userSnap.data()!;
+
+      if (user['role'] != 'nurse' ||
+          user['isActive'] != true ||
+          user['isVerified'] != true) {
+        throw StateError('الممرض غير متاح للحجز المباشر.');
+      }
+
+      final shiftPrice =
+          (profile['expectedPrice'] as num?)?.toDouble() ?? 0;
+      final shiftHours =
+          (profile['shiftHours'] as num?)?.toInt() ?? 12;
+
+      if (shiftPrice <= 0 || ![6, 12, 24].contains(shiftHours)) {
+        throw StateError('الممرض لم يحدد سعر الشيفت بشكل صحيح.');
+      }
+
+      if (shiftStart.isBefore(DateTime.now())) {
+        throw StateError('اختار موعدًا قادمًا.');
+      }
+
+      if (lockSnap.exists && lockSnap.data()?['active'] == true) {
+        throw StateError('الممرض لديه حجز نشط حاليًا.');
+      }
+
+      final platformFee = shiftPrice * 0.15;
+      final nurseEarnings = shiftPrice - platformFee;
+
+      tx.set(bookingRef, {
+        'clientId': clientId,
+        'nurseId': nurseId,
+        'careRequestId': '',
+        'bookingType': 'direct_nurse_hire',
+        'shiftStart': Timestamp.fromDate(shiftStart),
+        'shiftEnd': Timestamp.fromDate(
+          shiftStart.add(Duration(hours: shiftHours)),
+        ),
+        'shiftHours': shiftHours,
+        'pricePerHour': shiftPrice / shiftHours,
+        'pricePerShift': shiftPrice,
+        'platformFee': platformFee,
+        'totalAmount': shiftPrice,
+        'nurseEarnings': nurseEarnings,
+        'status': 'confirmed',
+        'paymentStatus': 'unpaid',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      tx.set(lockRef, {
+        'nurseId': nurseId,
+        'bookingId': bookingRef.id,
+        'careRequestId': '',
+        'active': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+
+    return bookingRef.id;
+  }
+
   Future<Booking?> getBooking(String id) async {
     final doc = await _bookingsCollection.doc(id).get();
     if (!doc.exists) return null;
