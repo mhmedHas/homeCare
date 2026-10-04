@@ -242,7 +242,7 @@ class NurseSmartMatchingService {
 
   List<String> _tokens(String value) {
     return _normalize(value)
-        .split(RegExp(r'[,،\\s]+'))
+        .split(RegExp(r'[,،\s]+'))
         .where((token) => token.length >= 2)
         .toList();
   }
