@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../services/nurse_profile_stats_service.dart';
+import '../../../services/nurse_trust_score_service.dart';
 import '../../../services/user_service.dart';
 import '../../shared/models/app_user.dart';
 
@@ -26,6 +27,7 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
   Map<String, dynamic> _verification = {};
   List<Map<String, dynamic>> _reviews = [];
   NurseProfileStats? _stats;
+  NurseTrustScore? _trustScore;
   bool _loading = true;
   String? _error;
 
@@ -45,6 +47,7 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         db.collection('nurseProfiles').doc(widget.nurseId).get(),
         db.collection('nurseDocuments').doc(widget.nurseId).get(),
         NurseProfileStatsService().getStats(widget.nurseId),
+        NurseTrustScoreService().getScore(widget.nurseId),
         db.collection('reviews').where('nurseId', isEqualTo: widget.nurseId).limit(50).get(),
       ]);
 
@@ -52,7 +55,8 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
       final profileDoc = results[1] as DocumentSnapshot<Map<String, dynamic>>;
       final verificationDoc = results[2] as DocumentSnapshot<Map<String, dynamic>>;
       final stats = results[3] as NurseProfileStats;
-      final reviewSnap = results[4] as QuerySnapshot<Map<String, dynamic>>;
+      final trustScore = results[4] as NurseTrustScore;
+      final reviewSnap = results[5] as QuerySnapshot<Map<String, dynamic>>;
 
       if (nurse == null || nurse.role != 'nurse') {
         throw StateError('not_nurse');
@@ -73,6 +77,7 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         _profile = profileDoc.data() ?? {};
         _verification = verificationDoc.data() ?? {};
         _stats = stats;
+        _trustScore = trustScore;
         _reviews = reviews;
         _error = null;
         _loading = false;
@@ -217,6 +222,8 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         const SizedBox(height: 12),
         _buildRatingCard(average, total, distribution),
         const SizedBox(height: 12),
+        _buildTrustScoreCard(),
+        const SizedBox(height: 12),
         _buildPerformanceCard(stats),
         if (governorates.isNotEmpty || workAreas.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -313,6 +320,134 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildTrustScoreCard() {
+    final trust = _trustScore;
+
+    if (trust == null) return const SizedBox.shrink();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'درجة الثقة في شفاء',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Container(
+                  width: 74,
+                  height: 74,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.primary.withValues(alpha: .10),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    trust.scoreLabel,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 17,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        trust.score <= 0
+                            ? 'لا توجد بيانات كافية حتى الآن'
+                            : 'النتيجة مبنية على الأداء الفعلي للممرض',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'التقييم، الحجوزات المكتملة، وإلغاءات الممرض تدخل في حساب درجة الثقة.',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _trustMetric(
+                    'مكتملة',
+                    trust.completedBookings.toString(),
+                  ),
+                ),
+                Expanded(
+                  child: _trustMetric(
+                    'إلغاءات الممرض',
+                    trust.cancelledBookings.toString(),
+                  ),
+                ),
+                Expanded(
+                  child: _trustMetric(
+                    'التقييم',
+                    trust.averageRating > 0
+                        ? trust.averageRating.toStringAsFixed(1)
+                        : '—',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'طريقة الحساب: التقييم 60% + الحجوزات المكتملة 25% + معدل عدم إلغاء الممرض 15%.',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _trustMetric(String title, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 16,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 11,
+          ),
+        ),
+      ],
     );
   }
 
