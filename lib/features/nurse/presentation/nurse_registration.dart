@@ -30,6 +30,7 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
   String? _selectedArea = 'مدينة نصر';
   String? _selectedSpecialization = 'تمريض عام';
   String? _selectedGender = 'male';
+  int _shiftHours = 12;
   final List<String> _selectedServices = [];
   final List<String> _selectedWorkAreas = [];
   XFile? _profileImage;
@@ -138,6 +139,7 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
         'governorate': _selectedGovernorate,
         'area': _selectedArea,
         'expectedPrice': double.tryParse(_priceController.text.trim()) ?? 0,
+        'shiftHours': _shiftHours,
         'isVerified': false,
         'verificationStatus': 'not_submitted',
         'createdAt': FieldValue.serverTimestamp(),
@@ -238,13 +240,43 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
                   validator: (v) => v == null || v.trim().isEmpty ? 'الخبرة مطلوبة' : null,
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
-                  controller: _priceController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'السعر المتوقع (ج.م/ساعة)', prefixIcon: Icon(Icons.money),
-                  ),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'السعر مطلوب' : null,
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _priceController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'سعر الشيفت (ج.م)',
+                          prefixIcon: Icon(Icons.money),
+                        ),
+                        validator: (v) {
+                          final price = double.tryParse(v?.trim() ?? '');
+                          return price == null || price <= 0 ? 'سعر الشيفت مطلوب' : null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        value: _shiftHours,
+                        decoration: const InputDecoration(
+                          labelText: 'مدة الشيفت',
+                          prefixIcon: Icon(Icons.schedule_outlined),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 6, child: Text('6 ساعات')),
+                          DropdownMenuItem(value: 12, child: Text('12 ساعة')),
+                          DropdownMenuItem(value: 24, child: Text('24 ساعة')),
+                        ],
+                        onChanged: _isLoading
+                            ? null
+                            : (value) {
+                                if (value != null) setState(() => _shiftHours = value);
+                              },
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 const Align(
