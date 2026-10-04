@@ -114,7 +114,7 @@ class _DirectNurseMatchingScreenState
       final matches = await DirectNurseMatchingService().findBestMatches(
         governorate: _governorate,
         area: area,
-        careType: _careType,
+        careType: careTypes[_careType] ?? _careType,
         preferredGender: _gender,
         specialization: _specialization ?? '',
         maxBudget: budget,
