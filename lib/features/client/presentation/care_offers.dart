@@ -69,13 +69,25 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
 
       final offers = offersSnap.docs.where((doc) {
         final status = doc.data()['status']?.toString() ?? '';
-        return status == 'pending' || status == 'accepted';
+        return status == 'pending' ||
+            status == 'on_hold' ||
+            status == 'accepted';
       }).toList();
 
       offers.sort((a, b) {
-        final aAccepted = a.data()['status'] == 'accepted';
-        final bAccepted = b.data()['status'] == 'accepted';
-        if (aAccepted != bAccepted) return aAccepted ? -1 : 1;
+        final aStatus = a.data()['status']?.toString() ?? '';
+        final bStatus = b.data()['status']?.toString() ?? '';
+        final aRank = aStatus == 'accepted'
+            ? 0
+            : aStatus == 'pending'
+                ? 1
+                : 2;
+        final bRank = bStatus == 'accepted'
+            ? 0
+            : bStatus == 'pending'
+                ? 1
+                : 2;
+        if (aRank != bRank) return aRank.compareTo(bRank);
         final aPrice = (a.data()['proposedPrice'] as num?)?.toDouble() ?? double.infinity;
         final bPrice = (b.data()['proposedPrice'] as num?)?.toDouble() ?? double.infinity;
         return aPrice.compareTo(bPrice);
@@ -119,23 +131,33 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
           .collection('careOffers')
           .where('requestId', isEqualTo: request.id)
           .where('status', isEqualTo: 'pending')
-          .limit(50)
+          .limit(100)
           .get();
 
       await db.runTransaction((tx) async {
         final reqSnap = await tx.get(requestRef);
         final selectedOfferSnap = await tx.get(offerRef);
 
+        final initialOfferData = selectedOfferSnap.data();
+        final nurseId = initialOfferData?['nurseId']?.toString() ?? '';
+        if (nurseId.isEmpty) throw Exception('invalid offer');
+
+        final nurseLockRef =
+            db.collection('nurseBookingLocks').doc(nurseId);
+        final lockSnap = await tx.get(nurseLockRef);
+
         if (!reqSnap.exists || reqSnap.data()?['clientId'] != uid) throw Exception('not allowed');
         if (reqSnap.data()?['status'] != 'open') throw Exception('closed');
         if (!selectedOfferSnap.exists) throw Exception('offer missing');
 
         final offerData = selectedOfferSnap.data()!;
-        if (offerData['requestId'] != request.id || offerData['status'] != 'pending') {
+        if (offerData['requestId'] != request.id ||
+            offerData['status'] != 'pending') {
           throw Exception('offer unavailable');
         }
-
-        final nurseId = offerData['nurseId']?.toString() ?? '';
+        if (lockSnap.exists && lockSnap.data()?['active'] == true) {
+          throw Exception('nurse_busy');
+        }
         final selectedPrice = (offerData['proposedPrice'] as num?)?.toDouble() ?? 0;
         final hours = (reqSnap.data()?['shiftHours'] as num?)?.toInt() ?? 0;
         final days = (reqSnap.data()?['daysCount'] as num?)?.toInt() ?? 1;
@@ -167,6 +189,14 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
+        for (final other in pendingOffersSnap.docs) {
+          if (other.id == offer.id) continue;
+          tx.update(other.reference, {
+            'status': 'on_hold',
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+
         tx.set(bookingRef, {
           'clientId': uid,
           'nurseId': nurseId,
@@ -186,25 +216,25 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
-      });
 
-      final batch = db.batch();
-      var rejectedCount = 0;
-      for (final other in pendingOffersSnap.docs) {
-        if (other.id == offer.id || rejectedCount >= 49) continue;
-        batch.update(other.reference, {
-          'status': 'rejected',
+        tx.set(nurseLockRef, {
+          'nurseId': nurseId,
+          'bookingId': bookingRef.id,
+          'careRequestId': request.id,
+          'active': true,
+          'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
-        rejectedCount++;
-      }
-      if (rejectedCount > 0) await batch.commit();
+      });
 
       if (mounted) context.go('/client/booking-details/${bookingRef.id}');
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
+        final message = e.toString().contains('nurse_busy')
+            ? 'الممرض لم يعد متاحًا، اختر ممرضًا آخر.'
+            : 'العرض لم يعد متاحًا. حدّث الصفحة وحاول مرة أخرى.';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('العرض لم يعد متاحًا. حدّث الصفحة وحاول مرة أخرى.')),
+          SnackBar(content: Text(message)),
         );
         await _load();
       }
