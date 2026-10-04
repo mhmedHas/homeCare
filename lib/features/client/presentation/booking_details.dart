@@ -138,7 +138,20 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                     title: 'تم الدفع بنجاح',
                     message: 'تم تأكيد الدفع من الإدارة وإتمام الرعاية.',
                   ),
-                if (booking.status != 'completed')
+                if (booking.status == 'cancelled' &&
+                    booking.careRequestId.isNotEmpty)
+                  _buildActionCard(
+                    icon: Icons.restart_alt,
+                    color: Colors.orange,
+                    title: 'الممرض ألغى الحجز',
+                    message:
+                        'تم إعادة فتح طلب الرعاية. يمكنك اختيار ممرض آخر من العروض السابقة.',
+                    buttonText: 'اختيار ممرض آخر',
+                    onPressed: () => context
+                        .go('/client/request-offers/${booking.careRequestId}'),
+                  ),
+                if (booking.status != 'completed' &&
+                    booking.status != 'cancelled')
                   _buildActionCard(
                     icon: Icons.medical_services_outlined,
                     color: AppColors.primary,
@@ -267,6 +280,7 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
       case 'confirmed': return 'تم اختيار الممرض والحجز مؤكد';
       case 'in_progress': return 'الرعاية جارية الآن';
       case 'completed': return 'الممرض أنهى طلب الرعاية';
+      case 'cancelled': return 'تم إلغاء الحجز وإعادة فتح طلب الرعاية';
       default: return 'حالة الرعاية: $status';
     }
   }
