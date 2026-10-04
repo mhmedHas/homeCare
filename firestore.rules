@@ -142,7 +142,32 @@ service cloud.firestore {
         && request.resource.data.status == 'confirmed'
         && request.resource.data.totalAmount > 0
         && request.resource.data.nurseEarnings > 0
-        && request.resource.data.platformFee >= 0;
+        && request.resource.data.platformFee >= 0
+        && (
+          request.resource.data.get('bookingType', '') != 'direct_nurse_hire'
+          || (
+            request.resource.data.careRequestId == ''
+            && request.resource.data.nurseId is string
+            && request.resource.data.get('shiftHours', 12) in [6, 12, 24]
+            && request.resource.data.totalAmount
+              == get(
+                /databases/$(database)/documents/nurseProfiles/$(request.resource.data.nurseId)
+              ).data.expectedPrice
+            && request.resource.data.shiftHours
+              == get(
+                /databases/$(database)/documents/nurseProfiles/$(request.resource.data.nurseId)
+              ).data.get('shiftHours', 12)
+            && get(
+                /databases/$(database)/documents/users/$(request.resource.data.nurseId)
+              ).data.role == 'nurse'
+            && get(
+                /databases/$(database)/documents/users/$(request.resource.data.nurseId)
+              ).data.isActive == true
+            && get(
+                /databases/$(database)/documents/users/$(request.resource.data.nurseId)
+              ).data.isVerified == true
+          )
+        );
 
       // Client can submit/re-submit a payment report, but can never set it
       // to verified or change the financial fields.
@@ -458,8 +483,17 @@ service cloud.firestore {
             'governorate',
             'area',
             'expectedPrice',
+            'shiftHours',
             'updatedAt'
           ])
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['expectedPrice'])
+            || request.resource.data.expectedPrice > 0
+          )
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['shiftHours'])
+            || request.resource.data.shiftHours in [6, 12, 24]
+          )
         );
 
       allow delete: if isAdmin();
