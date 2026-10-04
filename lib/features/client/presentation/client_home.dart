@@ -75,7 +75,14 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                         padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
                         sliver: SliverList(
                           delegate: SliverChildListDelegate([
-                            _HeroCard(onPressed: () => context.push('/client/create-request')),
+                            _HeroCard(
+                              onSmartMatch: () => context.push(
+                                '/client/direct-nurse-matching',
+                              ),
+                              onManualChoice: () => context.push(
+                                '/client/create-request',
+                              ),
+                            ),
                             const SizedBox(height: 18),
                             _SectionTitle(title: 'طلبك الحالي', action: active.isNotEmpty ? 'عرض الطلبات' : null, onAction: () => context.go('/client/my-requests')),
                             const SizedBox(height: 10),
@@ -144,37 +151,113 @@ class _Header extends StatelessWidget {
 }
 
 class _HeroCard extends StatelessWidget {
-  final VoidCallback onPressed;
-  const _HeroCard({required this.onPressed});
+  final VoidCallback onSmartMatch;
+  final VoidCallback onManualChoice;
+
+  const _HeroCard({
+    required this.onSmartMatch,
+    required this.onManualChoice,
+  });
+
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      color: AppColors.primary,
-      borderRadius: BorderRadius.circular(24),
-      boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: .18), blurRadius: 18, offset: const Offset(0, 8))],
-    ),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        Container(width: 48, height: 48, decoration: BoxDecoration(color: Colors.white.withValues(alpha: .15), borderRadius: BorderRadius.circular(15)), child: const Icon(Icons.medical_services_rounded, color: Colors.white, size: 27)),
-        const Spacer(),
-        const Icon(Icons.favorite_rounded, color: Colors.white70, size: 22),
-      ]),
-      const SizedBox(height: 18),
-      const Text('محتاج رعاية منزلية؟', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
-      const SizedBox(height: 7),
-      const Text('اطلب ممرض مناسب لاحتياجات الحالة، وحدد المواعيد والخدمة بسهولة.', style: TextStyle(color: Colors.white70, height: 1.45, fontSize: 14)),
-      const SizedBox(height: 18),
-      SizedBox(width: double.infinity, child: FilledButton.icon(
-        onPressed: onPressed,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('إنشاء طلب رعاية', style: TextStyle(fontWeight: FontWeight.w800)),
-        style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 14)),
-      )),
-    ]),
-  );
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: .18),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: .15),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: const Icon(
+                    Icons.medical_services_rounded,
+                    color: Colors.white,
+                    size: 27,
+                  ),
+                ),
+                const Spacer(),
+                const Icon(
+                  Icons.favorite_rounded,
+                  color: Colors.white70,
+                  size: 22,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'اختار طريقة الحصول على الممرض',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 23,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 7),
+            const Text(
+              'اختار شفاء للممرض المناسب ليك بسرعة، أو اعمل طلب وقارن بين العروض بنفسك.',
+              style: TextStyle(
+                color: Colors.white70,
+                height: 1.45,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onSmartMatch,
+                icon: const Icon(Icons.auto_awesome),
+                label: const Text(
+                  'اعثر لي على الممرض المناسب',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onManualChoice,
+                icon: const Icon(Icons.people_outline),
+                label: const Text(
+                  'أنا أختار',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white70),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
 }
-
 class _SectionTitle extends StatelessWidget {
   final String title;
   final String? action;
