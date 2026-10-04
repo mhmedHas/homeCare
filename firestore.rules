@@ -216,9 +216,18 @@ service cloud.firestore {
           && request.resource.data.clientId == resource.data.clientId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'status',
+            'checkInAt',
             'updatedAt'
           ])
           && request.resource.data.status in ['in_progress', 'completed']
+          && (
+            request.resource.data.status == 'completed'
+            || (
+              request.resource.data.status == 'in_progress'
+              && resource.data.status == 'confirmed'
+              && request.resource.data.get('checkInAt', null) == request.time
+            )
+          )
         );
 
       allow delete: if false;
@@ -422,8 +431,37 @@ service cloud.firestore {
 
     match /nurseProfiles/{nurseId} {
       allow read: if signedIn();
-      allow create, update: if isAdmin()
-        || (signedIn() && request.auth.uid == nurseId);
+
+      allow create: if isAdmin()
+        || (
+          signedIn()
+          && request.auth.uid == nurseId
+          && request.resource.data.uid == nurseId
+          && request.resource.data.get('gender', '') in ['male', 'female']
+          && request.resource.data.get('isVerified', false) == false
+          && request.resource.data.get('verificationStatus', 'not_submitted') == 'not_submitted'
+        );
+
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && request.auth.uid == nurseId
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'photoUrl',
+            'preferredGovernorates',
+            'specialization',
+            'experienceYears',
+            'services',
+            'skills',
+            'workAreas',
+            'governorate',
+            'area',
+            'expectedPrice',
+            'updatedAt'
+          ])
+        );
+
       allow delete: if isAdmin();
     }
 
