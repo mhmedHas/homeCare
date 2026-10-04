@@ -3,128 +3,167 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../services/shared_preferences_service.dart';
 
-class OnboardingScreen extends StatefulWidget {
+class OnboardingScreen extends StatelessWidget {
   const OnboardingScreen({super.key});
 
-  @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
-}
+  Future<void> _continueAs(BuildContext context, String role) async {
+    final prefs = SharedPreferencesService();
+    await prefs.setOnboardingCompleted(true);
+    await prefs.setSelectedRole(role);
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
-
-  final List<OnboardingItem> _items = [
-    OnboardingItem(
-      icon: Icons.health_and_safety,
-      title: 'الرعاية اللي تحتاجها، أقرب ليك',
-      description: 'وصل لأفضل مقدمي خدمات الرعاية المنزلية بسهولة وأمان.',
-    ),
-    OnboardingItem(
-      icon: Icons.verified_user,
-      title: 'ممرضين موثوقين',
-      description:
-          'اختار مقدم الرعاية المناسب بناءً على الخبرة والتقييم والتخصص.',
-    ),
-    OnboardingItem(
-      icon: Icons.calendar_month,
-      title: 'احجز وتابع بسهولة',
-      description: 'احجز الشيفت وتابع تفاصيل الرعاية من مكان واحد.',
-    ),
-  ];
-
-  void _nextPage() {
-    if (_currentPage < _items.length - 1) {
-      _pageController.nextPage(
-          duration: const Duration(milliseconds: 300), curve: Curves.easeIn);
-    } else {
-      _completeOnboarding();
+    if (context.mounted) {
+      context.go('/register');
     }
-  }
-
-  void _completeOnboarding() async {
-    await SharedPreferencesService().setOnboardingCompleted(true);
-    if (mounted) context.go('/role');
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: PageView.builder(
-                controller: _pageController,
-                onPageChanged: (index) => setState(() => _currentPage = index),
-                itemCount: _items.length,
-                itemBuilder: (context, index) {
-                  final item = _items[index];
-                  return Padding(
-                    padding: const EdgeInsets.all(32.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(item.icon, size: 120, color: AppColors.primary),
-                        const SizedBox(height: 32),
-                        Text(item.title,
-                            style: Theme.of(context).textTheme.headlineMedium,
-                            textAlign: TextAlign.center),
-                        const SizedBox(height: 16),
-                        Text(item.description,
-                            style: Theme.of(context).textTheme.bodyLarge,
-                            textAlign: TextAlign.center),
-                      ],
-                    ),
-                  );
-                },
-              ),
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+            child: Column(
+              children: [
+                const Spacer(),
+                Container(
+                  width: 112,
+                  height: 112,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.10),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.health_and_safety_rounded,
+                    size: 62,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                const Text(
+                  'أهلاً بك في شفاء ❤️',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'نوفر لك رعاية منزلية موثوقة وقت ما تحتاجها.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 17,
+                    height: 1.6,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 40),
+                _RoleButton(
+                  icon: Icons.favorite_rounded,
+                  title: 'أنا أحتاج رعاية',
+                  subtitle: 'أبحث عن ممرض أو مقدم رعاية منزلية',
+                  onTap: () => _continueAs(context, 'client'),
+                ),
+                const SizedBox(height: 16),
+                _RoleButton(
+                  icon: Icons.medical_services_rounded,
+                  title: 'أنا مقدم رعاية',
+                  subtitle: 'أقدم خدمات الرعاية المنزلية للمرضى',
+                  onTap: () => _continueAs(context, 'nurse'),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => context.go('/login'),
+                  child: const Text('لدي حساب بالفعل — تسجيل الدخول'),
+                ),
+              ],
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  TextButton(
-                    onPressed: _completeOnboarding,
-                    child: const Text('تخطي',
-                        style: TextStyle(color: AppColors.textSecondary)),
-                  ),
-                  Row(
-                    children: List.generate(
-                        _items.length,
-                        (index) => Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              width: _currentPage == index ? 24 : 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: _currentPage == index
-                                    ? AppColors.primary
-                                    : Colors.grey.shade300,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            )),
-                  ),
-                  ElevatedButton(
-                    onPressed: _nextPage,
-                    child: Text(_currentPage == _items.length - 1
-                        ? 'ابدأ الآن'
-                        : 'التالي'),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class OnboardingItem {
+class _RoleButton extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String description;
-  OnboardingItem(
-      {required this.icon, required this.title, required this.description});
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _RoleButton({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Ink(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppColors.primary.withOpacity(0.18),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(icon, color: AppColors.primary, size: 30),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                size: 18,
+                color: AppColors.primary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

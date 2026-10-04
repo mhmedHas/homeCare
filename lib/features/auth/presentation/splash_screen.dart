@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../services/auth_service.dart';
+import '../../../services/shared_preferences_service.dart';
 import '../../../services/user_service.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -30,20 +31,23 @@ class _SplashScreenState extends State<SplashScreen> {
       final user = auth.currentUser;
 
       if (user == null) {
-        // No authenticated user: always start the authentication flow at Login.
-        if (mounted) context.go('/login');
+        final onboardingCompleted =
+            SharedPreferencesService().isOnboardingCompleted();
+
+        if (mounted) {
+          context.go(
+            onboardingCompleted ? '/login' : '/onboarding',
+          );
+        }
         return;
       }
 
-      // Authenticated user: load the Firestore profile and continue to the
-      // correct home screen based on the saved role.
       setState(() => _status = 'جاري تحميل بيانات الحساب...');
       final appUser = await UserService().getUser(user.uid);
 
       if (!mounted) return;
 
       if (appUser == null) {
-        // Auth account exists, but the application profile is incomplete.
         context.go('/role');
         return;
       }
