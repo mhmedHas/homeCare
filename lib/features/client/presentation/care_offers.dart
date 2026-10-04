@@ -69,25 +69,10 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
 
       final offers = offersSnap.docs.where((doc) {
         final status = doc.data()['status']?.toString() ?? '';
-        return status == 'pending' ||
-            status == 'on_hold' ||
-            status == 'accepted';
+        return status == 'pending' || status == 'accepted';
       }).toList();
 
       offers.sort((a, b) {
-        final aStatus = a.data()['status']?.toString() ?? '';
-        final bStatus = b.data()['status']?.toString() ?? '';
-        final aRank = aStatus == 'accepted'
-            ? 0
-            : aStatus == 'pending'
-                ? 1
-                : 2;
-        final bRank = bStatus == 'accepted'
-            ? 0
-            : bStatus == 'pending'
-                ? 1
-                : 2;
-        if (aRank != bRank) return aRank.compareTo(bRank);
         final aPrice = (a.data()['proposedPrice'] as num?)?.toDouble() ?? double.infinity;
         final bPrice = (b.data()['proposedPrice'] as num?)?.toDouble() ?? double.infinity;
         return aPrice.compareTo(bPrice);
@@ -188,14 +173,6 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
           'status': 'accepted',
           'updatedAt': FieldValue.serverTimestamp(),
         });
-
-        for (final other in pendingOffersSnap.docs) {
-          if (other.id == offer.id) continue;
-          tx.update(other.reference, {
-            'status': 'on_hold',
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
 
         tx.set(bookingRef, {
           'clientId': uid,
