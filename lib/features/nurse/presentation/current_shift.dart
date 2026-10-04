@@ -90,6 +90,63 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
     }
   }
 
+  Future<void> _cancelBooking() async {
+    final booking = _booking;
+    if (booking == null || booking.status != 'confirmed' || _isProcessing) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('إلغاء الحجز'),
+        content: const Text(
+          'هل أنت متأكد من إلغاء هذا الحجز؟ سيتم إعادة فتح طلب العميل وإتاحة العروض السابقة للاختيار مرة أخرى.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('رجوع'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('تأكيد الإلغاء'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _isProcessing = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await BookingService().cancelBookingAsNurse(booking.id);
+      if (!mounted) return;
+      setState(() {
+        _booking = null;
+        _client = null;
+        _isCheckedIn = false;
+        _isCheckedOut = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم إلغاء الحجز وإعادة فتح طلب العميل')),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage =
+              e.toString().replaceFirst('Bad state: ', '');
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
   Future<void> _checkIn() async {
     setState(() {
       _isProcessing = true;
@@ -266,7 +323,8 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
                                 ),
                               ),
                             ),
-                          if (!_isCheckedOut && _booking!.status == 'confirmed')
+                          if (!_isCheckedOut &&
+                              _booking!.status == 'confirmed') ...[
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
@@ -281,6 +339,17 @@ class _CurrentShiftScreenState extends State<CurrentShiftScreen> {
                                     : const Text('تسجيل الحضور (Check-in)'),
                               ),
                             ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed:
+                                    _isProcessing ? null : _cancelBooking,
+                                icon: const Icon(Icons.cancel_outlined),
+                                label: const Text('إلغاء الحجز'),
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 12),
                           SizedBox(
                             width: double.infinity,

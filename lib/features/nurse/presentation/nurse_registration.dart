@@ -29,6 +29,7 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
   String? _selectedGovernorate = 'القاهرة';
   String? _selectedArea = 'مدينة نصر';
   String? _selectedSpecialization = 'تمريض عام';
+  String? _selectedGender = 'male';
   final List<String> _selectedServices = [];
   final List<String> _selectedWorkAreas = [];
   XFile? _profileImage;
@@ -131,6 +132,7 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
         'photoUrl': photoUrl,
         'specialization': _selectedSpecialization,
         'experienceYears': int.tryParse(_experienceController.text.trim()) ?? 0,
+        'gender': _selectedGender,
         'services': List<String>.from(_selectedServices),
         'workAreas': List<String>.from(_selectedWorkAreas),
         'governorate': _selectedGovernorate,
@@ -215,6 +217,8 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
                   items: _areas.map((a) => DropdownMenuItem(value: a, child: Text(a))).toList(),
                   onChanged: (v) => setState(() => _selectedArea = v),
                 ),
+                const SizedBox(height: 12),
+                _buildGenderSelector(),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedSpecialization,
@@ -307,6 +311,69 @@ class _NurseRegistrationScreenState extends State<NurseRegistrationScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildGenderSelector() {
+    return FormField<String>(
+      initialValue: _selectedGender,
+      validator: (value) =>
+          _selectedGender == null ? 'اختيار الجنس مطلوب' : null,
+      builder: (field) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                'الجنس',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: ChoiceChip(
+                    label: const Text('ذكر'),
+                    avatar: const Icon(Icons.male),
+                    selected: _selectedGender == 'male',
+                    onSelected: (selected) {
+                      if (!selected) return;
+                      setState(() => _selectedGender = 'male');
+                      field.didChange('male');
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ChoiceChip(
+                    label: const Text('أنثى'),
+                    avatar: const Icon(Icons.female),
+                    selected: _selectedGender == 'female',
+                    onSelected: (selected) {
+                      if (!selected) return;
+                      setState(() => _selectedGender = 'female');
+                      field.didChange('female');
+                    },
+                  ),
+                ),
+              ],
+            ),
+            if (field.hasError)
+              Padding(
+                padding: const EdgeInsets.only(top: 6, right: 12),
+                child: Text(
+                  field.errorText!,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
