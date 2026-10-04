@@ -7,7 +7,13 @@ import '../../shared/models/care_request.dart';
 
 class CareOffersScreen extends StatefulWidget {
   final String requestId;
-  const CareOffersScreen({super.key, required this.requestId});
+  final String? highlightOfferId;
+
+  const CareOffersScreen({
+    super.key,
+    required this.requestId,
+    this.highlightOfferId,
+  });
 
   @override
   State<CareOffersScreen> createState() => _CareOffersScreenState();
@@ -73,6 +79,11 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
       }).toList();
 
       offers.sort((a, b) {
+        if (widget.highlightOfferId != null) {
+          if (a.id == widget.highlightOfferId) return -1;
+          if (b.id == widget.highlightOfferId) return 1;
+        }
+
         final aPrice = (a.data()['proposedPrice'] as num?)?.toDouble() ?? double.infinity;
         final bPrice = (b.data()['proposedPrice'] as num?)?.toDouble() ?? double.infinity;
         return aPrice.compareTo(bPrice);
@@ -293,9 +304,15 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
             else
               ..._offers.map((offer) {
                 final accepted = offer.data()['status'] == 'accepted';
+                final highlighted = widget.highlightOfferId == offer.id;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: _card(offer, disabled: closed, accepted: accepted),
+                  child: _card(
+                    offer,
+                    disabled: closed,
+                    accepted: accepted,
+                    highlighted: highlighted,
+                  ),
                 );
               }),
           ],
@@ -308,6 +325,7 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
     QueryDocumentSnapshot<Map<String, dynamic>> offer, {
     required bool disabled,
     required bool accepted,
+    required bool highlighted,
   }) {
     final d = offer.data();
     final rating = (d['nurseRating'] as num?)?.toDouble() ?? 0;
@@ -319,11 +337,36 @@ class _CareOffersScreenState extends State<CareOffersScreen> {
 
     return Card(
       margin: EdgeInsets.zero,
+      color: highlighted ? AppColors.primaryLight : null,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (highlighted && !accepted) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: .10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.auto_awesome, size: 18, color: AppColors.primary),
+                    SizedBox(width: 7),
+                    Text(
+                      'أفضل ترشيح لك من شفاء',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             if (accepted) ...[
               Container(
                 width: double.infinity,
