@@ -188,6 +188,32 @@ service cloud.firestore {
           && resource.data.nurseId == request.auth.uid
           && request.resource.data.nurseId == resource.data.nurseId
           && request.resource.data.clientId == resource.data.clientId
+          && resource.data.status == 'confirmed'
+          && request.resource.data.status == 'cancelled'
+          && request.resource.data.cancelledBy == 'nurse'
+          && request.resource.data.get('cancelledAt', null) == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status',
+            'cancelledBy',
+            'cancelledAt',
+            'updatedAt'
+          ])
+          && getAfter(
+            /databases/$(database)/documents/careRequests/$(resource.data.careRequestId)
+          ).data.status == 'open'
+          && getAfter(
+            /databases/$(database)/documents/careRequests/$(resource.data.careRequestId)
+          ).data.get('selectedNurseId', null) == null
+          && getAfter(
+            /databases/$(database)/documents/careRequests/$(resource.data.careRequestId)
+          ).data.get('selectedOfferId', null) == null
+        )
+
+        || (
+          signedIn()
+          && resource.data.nurseId == request.auth.uid
+          && request.resource.data.nurseId == resource.data.nurseId
+          && request.resource.data.clientId == resource.data.clientId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'status',
             'updatedAt'
@@ -213,6 +239,30 @@ service cloud.firestore {
           signedIn()
           && resource.data.clientId == request.auth.uid
           && request.resource.data.clientId == resource.data.clientId
+        )
+        || (
+          signedIn()
+          && request.resource.data.status == 'open'
+          && request.resource.data.selectedNurseId == null
+          && request.resource.data.selectedOfferId == null
+          && request.resource.data.reopenedFromBookingId is string
+          && request.resource.data.reopenedFromBookingId != ''
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status',
+            'selectedNurseId',
+            'selectedOfferId',
+            'reopenedFromBookingId',
+            'updatedAt'
+          ])
+          && getAfter(
+            /databases/$(database)/documents/bookings/$(request.resource.data.reopenedFromBookingId)
+          ).data.nurseId == request.auth.uid
+          && getAfter(
+            /databases/$(database)/documents/bookings/$(request.resource.data.reopenedFromBookingId)
+          ).data.status == 'cancelled'
+          && getAfter(
+            /databases/$(database)/documents/bookings/$(request.resource.data.reopenedFromBookingId)
+          ).data.careRequestId == resource.id
         );
 
       allow delete: if isAdmin()
@@ -257,6 +307,44 @@ service cloud.firestore {
         );
 
       allow delete: if false;
+    }
+
+    match /nurseBookingLocks/{nurseId} {
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == nurseId);
+      allow list: if false;
+
+      allow create: if signedIn()
+        && request.resource.data.nurseId == nurseId
+        && request.resource.data.active == true
+        && request.resource.data.bookingId is string
+        && request.resource.data.bookingId != ''
+        && getAfter(
+          /databases/$(database)/documents/bookings/$(request.resource.data.bookingId)
+        ).data.nurseId == nurseId
+        && getAfter(
+          /databases/$(database)/documents/bookings/$(request.resource.data.bookingId)
+        ).data.clientId == request.auth.uid
+        && getAfter(
+          /databases/$(database)/documents/bookings/$(request.resource.data.bookingId)
+        ).data.status == 'confirmed'
+        && getAfter(
+          /databases/$(database)/documents/bookings/$(request.resource.data.bookingId)
+        ).data.careRequestId == request.resource.data.careRequestId;
+
+      allow delete: if isAdmin()
+        || (
+          signedIn()
+          && request.auth.uid == nurseId
+          && resource.data.active == true
+          && getAfter(
+            /databases/$(database)/documents/bookings/$(resource.data.bookingId)
+          ).data.nurseId == nurseId
+          && getAfter(
+            /databases/$(database)/documents/bookings/$(resource.data.bookingId)
+          ).data.status in ['completed', 'cancelled']
+        );
+
+      allow update: if false;
     }
 
     match /chats/{chatId} {
