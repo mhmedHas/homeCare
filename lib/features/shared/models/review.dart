@@ -5,7 +5,8 @@ class Review {
   final String bookingId;
   final String clientId;
   final String nurseId;
-  final int rating; // 1-5
+  final int rating;
+  final Map<String, int> ratings;
   final String? comment;
   final DateTime createdAt;
 
@@ -15,6 +16,7 @@ class Review {
     required this.clientId,
     required this.nurseId,
     required this.rating,
+    this.ratings = const {},
     this.comment,
     required this.createdAt,
   });
@@ -25,20 +27,32 @@ class Review {
         'clientId': clientId,
         'nurseId': nurseId,
         'rating': rating,
+        'ratings': ratings,
         'comment': comment,
         'createdAt': FieldValue.serverTimestamp(),
       };
 
   factory Review.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    final rawRatings = data['ratings'];
+
     return Review(
       id: doc.id,
       bookingId: data['bookingId'] ?? '',
       clientId: data['clientId'] ?? '',
       nurseId: data['nurseId'] ?? '',
-      rating: data['rating'] ?? 5,
-      comment: data['comment'],
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      rating: (data['rating'] as num?)?.toInt() ?? 5,
+      ratings: rawRatings is Map
+          ? rawRatings.map(
+              (key, value) => MapEntry(
+                key.toString(),
+                (value as num?)?.toInt() ?? 0,
+              ),
+            )
+          : const {},
+      comment: data['comment']?.toString(),
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ??
+          DateTime.now(),
     );
   }
 }
