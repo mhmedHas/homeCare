@@ -53,7 +53,6 @@ class DirectNurseMatchingService {
         .collection('users')
         .where('role', isEqualTo: 'nurse')
         .where('isActive', isEqualTo: true)
-        .where('isVerified', isEqualTo: true)
         .get();
 
     if (usersSnap.docs.isEmpty) return [];
@@ -65,18 +64,34 @@ class DirectNurseMatchingService {
 
     final nurseIds = userData.keys.toList();
     final profiles = <String, Map<String, dynamic>>{};
+    final documents = <String, Map<String, dynamic>>{};
 
     for (var i = 0; i < nurseIds.length; i += 30) {
       final chunk = nurseIds.sublist(
         i,
         i + 30 > nurseIds.length ? nurseIds.length : i + 30,
       );
-      final snap = await _db
-          .collection('nurseProfiles')
-          .where(FieldPath.documentId, whereIn: chunk)
-          .get();
-      for (final doc in snap.docs) {
+      final results = await Future.wait([
+        _db
+            .collection('nurseProfiles')
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get(),
+        _db
+            .collection('nurseDocuments')
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get(),
+      ]);
+
+      final profileSnap =
+          results[0] as QuerySnapshot<Map<String, dynamic>>;
+      final documentSnap =
+          results[1] as QuerySnapshot<Map<String, dynamic>>;
+
+      for (final doc in profileSnap.docs) {
         profiles[doc.id] = doc.data();
+      }
+      for (final doc in documentSnap.docs) {
+        documents[doc.id] = doc.data();
       }
     }
 
@@ -90,6 +105,12 @@ class DirectNurseMatchingService {
     for (final nurseId in nurseIds) {
       final user = userData[nurseId] ?? <String, dynamic>{};
       final profile = profiles[nurseId] ?? <String, dynamic>{};
+      final document = documents[nurseId] ?? <String, dynamic>{};
+
+      final verified = user['isVerified'] == true ||
+          profile['isVerified'] == true ||
+          document['verificationStatus']?.toString() == 'approved';
+      if (!verified) continue;
 
       final shiftPrice = (profile['expectedPrice'] as num?)?.toDouble() ?? 0;
       if (shiftPrice <= 0) continue;
@@ -104,8 +125,16 @@ class DirectNurseMatchingService {
         continue;
       }
 
-      final governorates = _stringList(profile['preferredGovernorates']);
-      final workAreas = _stringList(profile['workAreas']);
+      final governorates = _stringList(
+        profile['preferredGovernorates'] ??
+            (profile['governorate'] == null
+                ? const []
+                : [profile['governorate']]),
+      );
+      final workAreas = _stringList(
+        profile['workAreas'] ??
+            (profile['area'] == null ? const [] : [profile['area']]),
+      );
       final services = _stringList(profile['services']);
       final skills = _stringList(profile['skills']);
       final specializationValue =
