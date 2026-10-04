@@ -462,8 +462,6 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         : <String>[];
     final stats = _stats ?? const NurseProfileStats(
       completedBookings: 0,
-      onTimeRate: 0,
-      averageResponseMinutes: 0,
     );
 
     return Card(
@@ -504,19 +502,7 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
                   : governorates.join('، '),
             ),
             const Divider(height: 22),
-            Row(
-              children: [
-                Expanded(
-                  child: _ownMetric('حجوزات مكتملة', stats.completedBookings.toString()),
-                ),
-                Expanded(
-                  child: _ownMetric('الالتزام', stats.onTimeRateLabel),
-                ),
-                Expanded(
-                  child: _ownMetric('الاستجابة', stats.responseTimeLabel),
-                ),
-              ],
-            ),
+            _ownMetric('حجوزات مكتملة', stats.completedBookings.toString()),
           ],
         ),
       ),
