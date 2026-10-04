@@ -471,8 +471,28 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.bookingId == reviewId
         && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.nurseId is string
         && request.resource.data.rating >= 1
         && request.resource.data.rating <= 5
+        && request.resource.data.ratings is map
+        && request.resource.data.ratings.keys().hasOnly([
+          'punctuality',
+          'behavior',
+          'cleanliness',
+          'careQuality',
+          'communication'
+        ])
+        && request.resource.data.ratings.size() == 5
+        && request.resource.data.ratings.get('punctuality', 0) >= 1
+        && request.resource.data.ratings.get('punctuality', 0) <= 5
+        && request.resource.data.ratings.get('behavior', 0) >= 1
+        && request.resource.data.ratings.get('behavior', 0) <= 5
+        && request.resource.data.ratings.get('cleanliness', 0) >= 1
+        && request.resource.data.ratings.get('cleanliness', 0) <= 5
+        && request.resource.data.ratings.get('careQuality', 0) >= 1
+        && request.resource.data.ratings.get('careQuality', 0) <= 5
+        && request.resource.data.ratings.get('communication', 0) >= 1
+        && request.resource.data.ratings.get('communication', 0) <= 5
         && get(
           /databases/$(database)/documents/bookings/$(reviewId)
         ).data.clientId == request.auth.uid
