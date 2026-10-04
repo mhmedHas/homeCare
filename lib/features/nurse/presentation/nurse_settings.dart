@@ -76,10 +76,12 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
   final _firestore = FirebaseFirestore.instance;
   final _experienceController = TextEditingController();
   final _servicesController = TextEditingController();
+  final _shiftPriceController = TextEditingController();
 
   List<String> _selectedGovernorates = [];
   String? _selectedSpecialization;
   bool _loading = true;
+  int _shiftHours = 12;
   bool _saving = false;
 
   @override
@@ -92,6 +94,7 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
   void dispose() {
     _experienceController.dispose();
     _servicesController.dispose();
+    _shiftPriceController.dispose();
     super.dispose();
   }
 
@@ -126,6 +129,9 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
       _servicesController.text = servicesValue is List
           ? servicesValue.map((e) => e.toString()).join('\n')
           : (data['servicesText']?.toString() ?? '');
+      _shiftPriceController.text = data['expectedPrice']?.toString() ?? '';
+      final savedShiftHours = (data['shiftHours'] as num?)?.toInt() ?? 12;
+      _shiftHours = [6, 12, 24].contains(savedShiftHours) ? savedShiftHours : 12;
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -265,6 +271,11 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
       _showMessage('اكتب الخدمات التي تقدمها');
       return;
     }
+    final shiftPrice = double.tryParse(_shiftPriceController.text.trim());
+    if (shiftPrice == null || shiftPrice <= 0) {
+      _showMessage('اكتب سعر الشيفت بشكل صحيح');
+      return;
+    }
 
     setState(() => _saving = true);
 
@@ -282,6 +293,8 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
           'specialization': _selectedSpecialization,
           'experienceYears': experience,
           'services': services,
+          'expectedPrice': shiftPrice,
+          'shiftHours': _shiftHours,
           'updatedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
@@ -378,6 +391,44 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
                                   _selectedSpecialization = value;
                                 });
                               },
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _shiftPriceController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'سعر الشيفت',
+                                suffixText: 'ج.م',
+                                prefixIcon: Icon(Icons.payments_outlined),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: DropdownButtonFormField<int>(
+                              value: _shiftHours,
+                              decoration: const InputDecoration(
+                                labelText: 'مدة الشيفت',
+                                prefixIcon: Icon(Icons.schedule_outlined),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 6, child: Text('6 ساعات')),
+                                DropdownMenuItem(value: 12, child: Text('12 ساعة')),
+                                DropdownMenuItem(value: 24, child: Text('24 ساعة')),
+                              ],
+                              onChanged: _saving
+                                  ? null
+                                  : (value) {
+                                      if (value != null) {
+                                        setState(() => _shiftHours = value);
+                                      }
+                                    },
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       TextField(

@@ -453,6 +453,8 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
     final profile = _nurseProfile ?? {};
     final experience = (profile['experienceYears'] as num?)?.toInt() ?? 0;
     final specialization = profile['specialization']?.toString().trim();
+    final shiftPrice = (profile['expectedPrice'] as num?)?.toDouble() ?? 0;
+    final shiftHours = (profile['shiftHours'] as num?)?.toInt() ?? 12;
     final gender = profile['gender']?.toString();
     final governorates = profile['preferredGovernorates'] is List
         ? (profile['preferredGovernorates'] as List)
@@ -494,6 +496,12 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
                       ? 'ذكر'
                       : 'غير محدد',
             ),
+            if (shiftPrice > 0)
+              _profileInfoRow(
+                Icons.payments_outlined,
+                'سعر الشيفت',
+                shiftPrice.toStringAsFixed(0) + ' ج.م / ' + shiftHours.toString() + ' ساعة',
+              ),
             _profileInfoRow(
               Icons.location_on_outlined,
               'محافظات العمل',

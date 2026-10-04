@@ -20,8 +20,14 @@ import '../models/message.dart';
 /// on demand via "تحميل رسائل أقدم" so a conversation with a huge history
 /// never has to load, or listen to, everything at once.
 class ChatScreen extends StatefulWidget {
-  final String bookingId;
-  const ChatScreen({super.key, required this.bookingId});
+  final String? bookingId;
+  final String? directNurseId;
+
+  const ChatScreen({
+    super.key,
+    this.bookingId,
+    this.directNurseId,
+  });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -63,18 +69,8 @@ class _ChatScreenState extends State<ChatScreen> {
       _isLoading = true;
       _errorMessage = null;
     });
-    try {
-      final booking = await BookingService().getBooking(widget.bookingId);
-      if (booking == null) {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _errorMessage = 'الحجز غير موجود';
-          });
-        }
-        return;
-      }
 
+    try {
       final user = AuthService().currentUser;
       if (user == null) {
         if (mounted) {
@@ -87,16 +83,44 @@ class _ChatScreenState extends State<ChatScreen> {
       }
 
       final currentUserId = user.uid;
-      final otherUserId =
-          currentUserId == booking.clientId ? booking.nurseId : booking.clientId;
+      late final String otherUserId;
+      late final String chatId;
+      AppUser? otherUser;
 
-      final otherUser = await UserService().getUser(otherUserId);
+      if (widget.directNurseId != null &&
+          widget.directNurseId!.trim().isNotEmpty) {
+        otherUserId = widget.directNurseId!.trim();
+        otherUser = await UserService().getUser(otherUserId);
+        if (otherUser == null || otherUser.role != 'nurse') {
+          throw StateError('الممرض غير موجود');
+        }
 
-      final chatId = await _chatService.getOrCreateChat(
-        widget.bookingId,
-        booking.clientId,
-        booking.nurseId,
-      );
+        chatId = await _chatService.getOrCreateDirectChat(
+          clientId: currentUserId,
+          nurseId: otherUserId,
+        );
+      } else {
+        final bookingId = widget.bookingId;
+        if (bookingId == null || bookingId.trim().isEmpty) {
+          throw StateError('المحادثة غير مكتملة');
+        }
+
+        final booking = await BookingService().getBooking(bookingId);
+        if (booking == null) {
+          throw StateError('الحجز غير موجود');
+        }
+
+        otherUserId = currentUserId == booking.clientId
+            ? booking.nurseId
+            : booking.clientId;
+        otherUser = await UserService().getUser(otherUserId);
+
+        chatId = await _chatService.getOrCreateChat(
+          bookingId,
+          booking.clientId,
+          booking.nurseId,
+        );
+      }
 
       if (!mounted) return;
       setState(() {
@@ -106,13 +130,12 @@ class _ChatScreenState extends State<ChatScreen> {
         _isLoading = false;
       });
 
-      // Mark the other side's messages as seen once we open the thread.
       unawaited(_chatService.markMessagesAsSeen(chatId, currentUserId));
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'تعذر فتح المحادثة';
+          _errorMessage = e is StateError ? e.message : 'تعذر فتح المحادثة';
         });
       }
     }

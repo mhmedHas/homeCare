@@ -44,6 +44,30 @@ class ChatService {
     return docRef.id;
   }
 
+  Future<String> getOrCreateDirectChat({
+    required String clientId,
+    required String nurseId,
+  }) async {
+    final chatId = 'direct_' + clientId + '_' + nurseId;
+    final chatRef = _firestore.collection('chats').doc(chatId);
+    final snap = await chatRef.get();
+
+    if (!snap.exists) {
+      await chatRef.set({
+        'id': chatId,
+        'type': 'direct_nurse',
+        'clientId': clientId,
+        'nurseId': nurseId,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'unreadForClient': 0,
+        'unreadForNurse': 0,
+      });
+    }
+
+    return chatId;
+  }
+
   Future<void> sendMessage(
       String chatId, String senderId, String receiverId, String text) async {
     final chatRef = _firestore.collection('chats').doc(chatId);
