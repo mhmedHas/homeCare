@@ -5,6 +5,7 @@ class Booking {
   final String clientId;
   final String nurseId;
   final String careRequestId;
+  final String bookingType;
   final DateTime shiftStart;
   final DateTime shiftEnd;
   final int shiftHours;
@@ -27,6 +28,7 @@ class Booking {
     required this.clientId,
     required this.nurseId,
     required this.careRequestId,
+    this.bookingType = '',
     required this.shiftStart,
     required this.shiftEnd,
     required this.shiftHours,
@@ -85,6 +87,7 @@ class Booking {
       clientId: data['clientId']?.toString() ?? '',
       nurseId: data['nurseId']?.toString() ?? '',
       careRequestId: data['careRequestId']?.toString() ?? '',
+      bookingType: data['bookingType']?.toString() ?? '',
       shiftStart: _date(data['shiftStart']),
       shiftEnd: _date(data['shiftEnd']),
       shiftHours: _int(data['shiftHours']),
@@ -110,6 +113,7 @@ class Booking {
         'clientId': clientId,
         'nurseId': nurseId,
         'careRequestId': careRequestId,
+        'bookingType': bookingType,
         'shiftStart': Timestamp.fromDate(shiftStart),
         'shiftEnd': Timestamp.fromDate(shiftEnd),
         'shiftHours': shiftHours,
@@ -137,6 +141,7 @@ class Booking {
     String? clientId,
     String? nurseId,
     String? careRequestId,
+    String? bookingType,
     DateTime? shiftStart,
     DateTime? shiftEnd,
     int? shiftHours,
@@ -159,6 +164,7 @@ class Booking {
       clientId: clientId ?? this.clientId,
       nurseId: nurseId ?? this.nurseId,
       careRequestId: careRequestId ?? this.careRequestId,
+      bookingType: bookingType ?? this.bookingType,
       shiftStart: shiftStart ?? this.shiftStart,
       shiftEnd: shiftEnd ?? this.shiftEnd,
       shiftHours: shiftHours ?? this.shiftHours,
