@@ -2,12 +2,46 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../features/shared/models/booking.dart';
 
 class BookingService {
-  final CollectionReference _bookingsCollection = FirebaseFirestore.instance.collection('bookings');
+  final CollectionReference<Map<String, dynamic>> _bookingsCollection =
+      FirebaseFirestore.instance.collection('bookings');
+
+  static const Set<String> activeStatuses = {
+    'pending_payment',
+    'confirmed',
+    'in_progress',
+  };
 
   Future<String> createBooking(Booking booking) async {
+    if (booking.nurseId.trim().isEmpty) {
+      throw StateError('بيانات الممرض غير مكتملة.');
+    }
+    if (booking.status != 'confirmed') {
+      throw StateError('لا يمكن إنشاء حجز غير مؤكد.');
+    }
+
     final docRef = _bookingsCollection.doc();
+    final lockRef = FirebaseFirestore.instance
+        .collection('nurseBookingLocks')
+        .doc(booking.nurseId);
     final newBooking = booking.copyWith(id: docRef.id);
-    await docRef.set(newBooking.toMap());
+
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final lockSnap = await tx.get(lockRef);
+      if (lockSnap.exists && lockSnap.data()?['active'] == true) {
+        throw StateError('هذا الممرض لديه حجز نشط بالفعل.');
+      }
+
+      tx.set(docRef, newBooking.toMap());
+      tx.set(lockRef, {
+        'nurseId': booking.nurseId,
+        'bookingId': docRef.id,
+        'careRequestId': booking.careRequestId,
+        'active': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+
     return docRef.id;
   }
 
@@ -67,10 +101,120 @@ class BookingService {
     });
   }
 
+  Future<void> cancelBookingAsNurse(String bookingId) async {
+    final db = FirebaseFirestore.instance;
+    final bookingRef = _bookingsCollection.doc(bookingId);
+
+    final bookingBefore = await bookingRef.get();
+    if (!bookingBefore.exists) throw StateError('الحجز غير موجود.');
+
+    final bookingData = bookingBefore.data()!;
+    final nurseId = bookingData['nurseId']?.toString() ?? '';
+    final requestId = bookingData['careRequestId']?.toString() ?? '';
+    if (nurseId.isEmpty || requestId.isEmpty) {
+      throw StateError('بيانات الحجز غير مكتملة.');
+    }
+
+    final onHoldOffers = await db
+        .collection('careOffers')
+        .where('requestId', isEqualTo: requestId)
+        .where('status', isEqualTo: 'on_hold')
+        .limit(100)
+        .get();
+
+    final requestRef = db.collection('careRequests').doc(requestId);
+    final lockRef = db.collection('nurseBookingLocks').doc(nurseId);
+
+    await db.runTransaction((tx) async {
+      final bookingSnap = await tx.get(bookingRef);
+      final requestSnap = await tx.get(requestRef);
+      final lockSnap = await tx.get(lockRef);
+
+      if (!bookingSnap.exists || !requestSnap.exists) {
+        throw StateError('الحجز أو طلب الرعاية غير موجود.');
+      }
+
+      final data = bookingSnap.data()!;
+      if (data['nurseId']?.toString() != nurseId) {
+        throw StateError('الحجز لا يخص هذا الممرض.');
+      }
+      if (data['status']?.toString() != 'confirmed') {
+        throw StateError('لا يمكن إلغاء الحجز بعد بدء الرعاية.');
+      }
+      if (!lockSnap.exists ||
+          lockSnap.data()?['bookingId']?.toString() != bookingId ||
+          lockSnap.data()?['active'] != true) {
+        throw StateError(
+          'حجز الممرض النشط غير متزامن. حدّث الصفحة وحاول مرة أخرى.',
+        );
+      }
+
+      final requestData = requestSnap.data()!;
+      if (requestData['status']?.toString() != 'booked' ||
+          requestData['selectedNurseId']?.toString() != nurseId) {
+        throw StateError('طلب الرعاية لم يعد مرتبطًا بهذا الحجز.');
+      }
+
+      final selectedOfferId =
+          data['offerId']?.toString().trim().isNotEmpty == true
+              ? data['offerId'].toString()
+              : requestData['selectedOfferId']?.toString() ?? '';
+
+      tx.update(bookingRef, {
+        'status': 'cancelled',
+        'cancelledBy': 'nurse',
+        'cancelledAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      tx.update(requestRef, {
+        'status': 'open',
+        'selectedNurseId': null,
+        'selectedOfferId': null,
+        'reopenedFromBookingId': bookingId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (selectedOfferId.isNotEmpty) {
+        tx.update(db.collection('careOffers').doc(selectedOfferId), {
+          'status': 'cancelled',
+          'reopenedFromBookingId': bookingId,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      for (final offer in onHoldOffers.docs) {
+        tx.update(offer.reference, {
+          'status': 'pending',
+          'reopenedFromBookingId': bookingId,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      tx.delete(lockRef);
+    });
+  }
+
   Future<void> checkOutShift(String bookingId) async {
-    await _bookingsCollection.doc(bookingId).update({
-      'status': 'completed',
-      'updatedAt': FieldValue.serverTimestamp(),
+    final db = FirebaseFirestore.instance;
+    final bookingRef = _bookingsCollection.doc(bookingId);
+
+    await db.runTransaction((tx) async {
+      final bookingSnap = await tx.get(bookingRef);
+      if (!bookingSnap.exists) throw StateError('الحجز غير موجود.');
+
+      final data = bookingSnap.data()!;
+      final nurseId = data['nurseId']?.toString() ?? '';
+      if (nurseId.isEmpty) throw StateError('بيانات الممرض غير مكتملة.');
+      if (!['confirmed', 'in_progress'].contains(data['status']?.toString())) {
+        throw StateError('الحجز ليس نشطًا.');
+      }
+
+      tx.update(bookingRef, {
+        'status': 'completed',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      tx.delete(db.collection('nurseBookingLocks').doc(nurseId));
     });
   }
 }
