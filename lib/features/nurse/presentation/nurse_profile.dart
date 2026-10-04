@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../services/auth_service.dart';
+import '../../../services/nurse_profile_stats_service.dart';
 import '../../../services/shared_preferences_service.dart';
 import '../../../services/supabase_storage_service.dart';
 import '../../../services/user_service.dart';
@@ -30,6 +31,8 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
 
   String? _errorMessage;
   String? _photoUrl;
+  NurseProfileStats? _stats;
+  bool _isVerifiedByShifa = false;
 
   final ImagePicker _imagePicker = ImagePicker();
   final SupabaseStorageService _storage = SupabaseStorageService();
@@ -66,11 +69,19 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
             .collection('nurseProfiles')
             .doc(firebaseUser.uid)
             .get(),
+        FirebaseFirestore.instance
+            .collection('nurseDocuments')
+            .doc(firebaseUser.uid)
+            .get(),
+        NurseProfileStatsService().getStats(firebaseUser.uid),
       ]);
 
       final appUser = results[0] as AppUser?;
       final doc = results[1] as DocumentSnapshot<Map<String, dynamic>>;
       final profileData = doc.data();
+      final verificationDoc =
+          results[2] as DocumentSnapshot<Map<String, dynamic>>;
+      final stats = results[3] as NurseProfileStats;
 
       String? photoUrl;
       final profilePhoto = profileData?['photoUrl'];
@@ -88,6 +99,10 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         _user = appUser;
         _nurseProfile = profileData;
         _photoUrl = photoUrl;
+        _stats = stats;
+        _isVerifiedByShifa =
+            verificationDoc.data()?['verificationStatus']?.toString() ==
+                'approved';
         _isLoading = false;
       });
     } catch (e) {
@@ -286,6 +301,8 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         children: [
           _buildProfileHeader(),
           const SizedBox(height: 12),
+          _buildProfessionalSummary(),
+          const SizedBox(height: 12),
           _buildMenuItem(
             Icons.location_city_outlined,
             'إعدادات العمل والمحافظات',
@@ -404,7 +421,7 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
               style: Theme.of(context).textTheme.headlineSmall,
               textAlign: TextAlign.center,
             ),
-            if (_user!.isVerified)
+            if (_isVerifiedByShifa || _user!.isVerified)
               const Padding(
                 padding: EdgeInsets.only(top: 6),
                 child: Row(
@@ -429,6 +446,115 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildProfessionalSummary() {
+    final profile = _nurseProfile ?? {};
+    final experience = (profile['experienceYears'] as num?)?.toInt() ?? 0;
+    final specialization = profile['specialization']?.toString().trim();
+    final gender = profile['gender']?.toString();
+    final governorates = profile['preferredGovernorates'] is List
+        ? (profile['preferredGovernorates'] as List)
+            .map((e) => e.toString())
+            .where((e) => e.trim().isNotEmpty)
+            .toList()
+        : <String>[];
+    final stats = _stats ?? const NurseProfileStats(
+      completedBookings: 0,
+      onTimeRate: 0,
+      averageResponseMinutes: 0,
+    );
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'ملخصي المهني',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            _profileInfoRow(
+              Icons.medical_services_outlined,
+              'التخصص',
+              specialization?.isNotEmpty == true ? specialization! : 'غير محدد',
+            ),
+            _profileInfoRow(
+              Icons.workspace_premium_outlined,
+              'الخبرة',
+              '$experience سنة',
+            ),
+            _profileInfoRow(
+              gender == 'female' ? Icons.female : Icons.male,
+              'الجنس',
+              gender == 'female'
+                  ? 'أنثى'
+                  : gender == 'male'
+                      ? 'ذكر'
+                      : 'غير محدد',
+            ),
+            _profileInfoRow(
+              Icons.location_on_outlined,
+              'محافظات العمل',
+              governorates.isEmpty
+                  ? 'غير محددة'
+                  : governorates.join('، '),
+            ),
+            const Divider(height: 22),
+            Row(
+              children: [
+                Expanded(
+                  child: _ownMetric('حجوزات مكتملة', stats.completedBookings.toString()),
+                ),
+                Expanded(
+                  child: _ownMetric('الالتزام', stats.onTimeRateLabel),
+                ),
+                Expanded(
+                  child: _ownMetric('الاستجابة', stats.responseTimeLabel),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _profileInfoRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 19, color: AppColors.primary),
+          const SizedBox(width: 10),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          const Spacer(),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _ownMetric(String title, String value) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 3),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+        ),
+      ],
     );
   }
 
