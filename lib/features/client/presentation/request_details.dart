@@ -174,11 +174,22 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                                             : 'عرض $_offerCount من عروض الممرضين'))),
                               if (request.status == 'open') ...[
                                 const SizedBox(height: 10),
+                                SizedBox(
+                                  height: 52,
+                                  child: FilledButton.icon(
+                                    onPressed: () => context.push(
+                                      '/client/smart-match/' + request.id,
+                                    ),
+                                    icon: const Icon(Icons.auto_awesome),
+                                    label: const Text('اعثر لي على الممرض المناسب'),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
                                 OutlinedButton.icon(
                                     onPressed: () => context.push(
-                                        '/client/nurse-results/${request.id}'),
+                                        '/client/nurse-results/' + request.id),
                                     icon: const Icon(Icons.search),
-                                    label: const Text('استعراض الممرضين')),
+                                    label: const Text('أنا أختار - استعراض الممرضين')),
                               ],
                               if (_bookingId != null) ...[
                                 const SizedBox(height: 10),
