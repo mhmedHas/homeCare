@@ -207,12 +207,57 @@ class BookingService {
     final bookingData = bookingBefore.data()!;
     final nurseId = bookingData['nurseId']?.toString() ?? '';
     final requestId = bookingData['careRequestId']?.toString() ?? '';
-    if (nurseId.isEmpty || requestId.isEmpty) {
+    final bookingType = bookingData['bookingType']?.toString() ?? '';
+
+    if (nurseId.isEmpty) {
+      throw StateError('بيانات الحجز غير مكتملة.');
+    }
+
+    final lockRef = db.collection('nurseBookingLocks').doc(nurseId);
+
+    if (bookingType == 'direct_nurse_hire') {
+      await db.runTransaction((tx) async {
+        final bookingSnap = await tx.get(bookingRef);
+        final lockSnap = await tx.get(lockRef);
+
+        if (!bookingSnap.exists) {
+          throw StateError('الحجز غير موجود.');
+        }
+
+        final data = bookingSnap.data()!;
+        if (data['nurseId']?.toString() != nurseId) {
+          throw StateError('الحجز لا يخص هذا الممرض.');
+        }
+
+        if (data['status']?.toString() != 'confirmed') {
+          throw StateError('لا يمكن إلغاء الحجز بعد بدء الرعاية.');
+        }
+
+        if (!lockSnap.exists ||
+            lockSnap.data()?['bookingId']?.toString() != bookingId ||
+            lockSnap.data()?['active'] != true) {
+          throw StateError(
+            'حجز الممرض النشط غير متزامن. حدّث الصفحة وحاول مرة أخرى.',
+          );
+        }
+
+        tx.update(bookingRef, {
+          'status': 'cancelled',
+          'cancelledBy': 'nurse',
+          'cancelledAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        tx.delete(lockRef);
+      });
+      return;
+    }
+
+    if (requestId.isEmpty) {
       throw StateError('بيانات الحجز غير مكتملة.');
     }
 
     final requestRef = db.collection('careRequests').doc(requestId);
-    final lockRef = db.collection('nurseBookingLocks').doc(nurseId);
 
     await db.runTransaction((tx) async {
       final bookingSnap = await tx.get(bookingRef);
@@ -275,7 +320,6 @@ class BookingService {
       tx.delete(lockRef);
     });
   }
-
   Future<void> checkOutShift(String bookingId) async {
     final db = FirebaseFirestore.instance;
     final bookingRef = _bookingsCollection.doc(bookingId);
