@@ -95,9 +95,22 @@ class BookingService {
   }
 
   Future<void> checkInShift(String bookingId) async {
-    await _bookingsCollection.doc(bookingId).update({
-      'status': 'in_progress',
-      'updatedAt': FieldValue.serverTimestamp(),
+    final bookingRef = _bookingsCollection.doc(bookingId);
+
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(bookingRef);
+      if (!snap.exists) throw StateError('الحجز غير موجود.');
+
+      final data = snap.data()!;
+      if (data['status']?.toString() != 'confirmed') {
+        throw StateError('لا يمكن تسجيل الحضور لهذا الحجز الآن.');
+      }
+
+      tx.update(bookingRef, {
+        'status': 'in_progress',
+        'checkInAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     });
   }
 
