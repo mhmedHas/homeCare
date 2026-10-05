@@ -12,8 +12,11 @@ class UserService {
       DocumentSnapshot doc = await _usersCollection.doc(uid).get();
       if (!doc.exists) return null;
       return AppUser.fromFirestore(doc);
-    } catch (e) {
-      return null;
+    } on FirebaseException {
+      // null means the document truly does not exist.
+      // Real Firestore errors (for example permission-denied) must
+      // propagate so callers don't mistake an error for a missing user.
+      rethrow;
     }
   }
 
