@@ -41,6 +41,7 @@ import '../../features/nurse/presentation/nurse_reviews.dart';
 import '../../features/nurse/presentation/nurse_profile.dart' as nurse_profile;
 import '../../features/nurse/presentation/nurse_settings.dart';
 import '../../features/admin/presentation/admin_payment_dashboard.dart';
+import '../../features/shared/presentation/app_information.dart';
 import '../../services/admin_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
@@ -64,6 +65,11 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/role', builder: (_, __) => const RoleSelectionScreen()),
     GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
     GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
+    GoRoute(path: '/info/about', builder: (_, __) => const AppInformationScreen(type: InformationPageType.about)),
+    GoRoute(path: '/info/terms', builder: (_, __) => const AppInformationScreen(type: InformationPageType.terms)),
+    GoRoute(path: '/info/privacy', builder: (_, __) => const AppInformationScreen(type: InformationPageType.privacy)),
+    GoRoute(path: '/info/refund', builder: (_, __) => const AppInformationScreen(type: InformationPageType.refund)),
+    GoRoute(path: '/info/contact', builder: (_, __) => const AppInformationScreen(type: InformationPageType.contact)),
     GoRoute(
       path: '/admin/payments',
       builder: (_, __) => const AdminPaymentDashboard(),
