@@ -255,7 +255,7 @@ Future<String?> _redirectLogic(
   final user = auth.currentUser;
 
   if (user == null) {
-    const publicPaths = {'/login', '/register', '/role', '/splash', '/onboarding'};
+    const publicPaths = {'/login', '/register', '/role', '/splash', '/onboarding', '/info/about', '/info/terms', '/info/privacy', '/info/refund', '/info/contact'};
     return publicPaths.contains(currentPath) ? null : '/login';
   }
 
