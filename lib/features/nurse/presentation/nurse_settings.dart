@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../shared/presentation/legal_links.dart';
 
 class NurseSettingsScreen extends StatefulWidget {
   const NurseSettingsScreen({super.key});
@@ -478,6 +479,8 @@ class _NurseSettingsScreenState extends State<NurseSettingsScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 20),
+                const LegalLinksCard(),
                 const SizedBox(height: 20),
                 SizedBox(
                   height: 52,
