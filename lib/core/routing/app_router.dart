@@ -40,7 +40,6 @@ import '../../features/nurse/presentation/earnings.dart';
 import '../../features/nurse/presentation/nurse_reviews.dart';
 import '../../features/nurse/presentation/nurse_profile.dart' as nurse_profile;
 import '../../features/nurse/presentation/nurse_settings.dart';
-import '../../features/admin/presentation/admin_payment_dashboard.dart';
 import '../../features/shared/presentation/app_information.dart';
 import '../../services/admin_service.dart';
 import '../../services/auth_service.dart';
@@ -65,19 +64,31 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/role', builder: (_, __) => const RoleSelectionScreen()),
     GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
     GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
-    GoRoute(path: '/info/about', builder: (_, __) => const AppInformationScreen(type: InformationPageType.about)),
-    GoRoute(path: '/info/terms', builder: (_, __) => const AppInformationScreen(type: InformationPageType.terms)),
-    GoRoute(path: '/info/privacy', builder: (_, __) => const AppInformationScreen(type: InformationPageType.privacy)),
-    GoRoute(path: '/info/refund', builder: (_, __) => const AppInformationScreen(type: InformationPageType.refund)),
-    GoRoute(path: '/info/contact', builder: (_, __) => const AppInformationScreen(type: InformationPageType.contact)),
     GoRoute(
-      path: '/admin/payments',
-      builder: (_, __) => const AdminPaymentDashboard(),
-    ),
+        path: '/info/about',
+        builder: (_, __) =>
+            const AppInformationScreen(type: InformationPageType.about)),
+    GoRoute(
+        path: '/info/terms',
+        builder: (_, __) =>
+            const AppInformationScreen(type: InformationPageType.terms)),
+    GoRoute(
+        path: '/info/privacy',
+        builder: (_, __) =>
+            const AppInformationScreen(type: InformationPageType.privacy)),
+    GoRoute(
+        path: '/info/refund',
+        builder: (_, __) =>
+            const AppInformationScreen(type: InformationPageType.refund)),
+    GoRoute(
+        path: '/info/contact',
+        builder: (_, __) =>
+            const AppInformationScreen(type: InformationPageType.contact)),
     ShellRoute(
       builder: (_, __, child) => ClientShell(child: child),
       routes: [
-        GoRoute(path: '/client/home', builder: (_, __) => const ClientHomeScreen()),
+        GoRoute(
+            path: '/client/home', builder: (_, __) => const ClientHomeScreen()),
         GoRoute(
           path: '/client/create-request',
           builder: (_, __) => const CreateCareRequestScreen(),
@@ -174,7 +185,8 @@ final GoRouter appRouter = GoRouter(
     ShellRoute(
       builder: (_, __, child) => NurseShell(child: child),
       routes: [
-        GoRoute(path: '/nurse/home', builder: (_, __) => const NurseHomeScreen()),
+        GoRoute(
+            path: '/nurse/home', builder: (_, __) => const NurseHomeScreen()),
         GoRoute(
           path: '/nurse/registration',
           builder: (_, __) => const NurseRegistrationScreen(),
@@ -255,14 +267,19 @@ Future<String?> _redirectLogic(
   final user = auth.currentUser;
 
   if (user == null) {
-    const publicPaths = {'/login', '/register', '/role', '/splash', '/onboarding', '/info/about', '/info/terms', '/info/privacy', '/info/refund', '/info/contact'};
+    const publicPaths = {
+      '/login',
+      '/register',
+      '/role',
+      '/splash',
+      '/onboarding',
+      '/info/about',
+      '/info/terms',
+      '/info/privacy',
+      '/info/refund',
+      '/info/contact'
+    };
     return publicPaths.contains(currentPath) ? null : '/login';
-  }
-
-  final isAdmin = await AdminService().isAdmin(user.uid);
-
-  if (isAdmin) {
-    return currentPath.startsWith('/admin') ? null : '/admin/payments';
   }
 
   if (currentPath.startsWith('/admin')) {
