@@ -41,7 +41,7 @@ import '../../features/nurse/presentation/nurse_reviews.dart';
 import '../../features/nurse/presentation/nurse_profile.dart' as nurse_profile;
 import '../../features/nurse/presentation/nurse_settings.dart';
 import '../../features/shared/presentation/app_information.dart';
-import '../../services/admin_service.dart';
+import '../../features/shared/models/app_user.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
 
@@ -286,7 +286,23 @@ Future<String?> _redirectLogic(
     return '/login';
   }
 
-  final appUser = await UserService().getUser(user.uid);
+  AppUser? appUser;
+  try {
+    appUser = await UserService().getUser(user.uid);
+  } on FirebaseException {
+    // Do not treat Firestore failures as a missing user/role.
+    // Keep the user on the auth screen so the real error can be shown
+    // by the login flow instead of redirecting to "اختر نوع الحساب".
+    const authPaths = {
+      '/login',
+      '/register',
+      '/role',
+      '/splash',
+      '/onboarding',
+    };
+    return authPaths.contains(currentPath) ? null : '/login';
+  }
+
   if (appUser == null) {
     return (currentPath == '/role' || currentPath == '/register')
         ? null
