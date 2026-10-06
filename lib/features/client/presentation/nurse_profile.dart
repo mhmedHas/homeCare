@@ -42,24 +42,40 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
 
     try {
       final db = FirebaseFirestore.instance;
+      // Load only the data that the client is allowed to read directly.
+      // nurseDocuments and bookings are private collections; reading either
+      // from the client profile screen can cause permission-denied and make
+      // Future.wait fail for the entire profile.
       final results = await Future.wait([
         UserService().getUser(widget.nurseId),
         db.collection('nurseProfiles').doc(widget.nurseId).get(),
-        db.collection('nurseDocuments').doc(widget.nurseId).get(),
-        NurseProfileStatsService().getStats(widget.nurseId),
-        NurseTrustScoreService().getScore(widget.nurseId),
         db.collection('reviews').where('nurseId', isEqualTo: widget.nurseId).limit(50).get(),
       ]);
 
       final nurse = results[0] as AppUser?;
       final profileDoc = results[1] as DocumentSnapshot<Map<String, dynamic>>;
-      final verificationDoc = results[2] as DocumentSnapshot<Map<String, dynamic>>;
-      final stats = results[3] as NurseProfileStats;
-      final trustScore = results[4] as NurseTrustScore;
-      final reviewSnap = results[5] as QuerySnapshot<Map<String, dynamic>>;
+      final reviewSnap = results[2] as QuerySnapshot<Map<String, dynamic>>;
 
       if (nurse == null || nurse.role != 'nurse') {
         throw StateError('not_nurse');
+      }
+
+      // These services currently read bookings, which are intentionally
+      // restricted by Firestore rules to participants. They must not make
+      // the public nurse profile fail when the viewer is a client.
+      NurseProfileStats? stats;
+      NurseTrustScore? trustScore;
+
+      try {
+        stats = await NurseProfileStatsService().getStats(widget.nurseId);
+      } catch (_) {
+        stats = null;
+      }
+
+      try {
+        trustScore = await NurseTrustScoreService().getScore(widget.nurseId);
+      } catch (_) {
+        trustScore = null;
       }
 
       final reviews = reviewSnap.docs
@@ -230,8 +246,10 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         _buildRatingCard(average, total, distribution),
         const SizedBox(height: 12),
         _buildTrustScoreCard(),
-        const SizedBox(height: 12),
-        _buildPerformanceCard(stats),
+        if (_stats != null) ...[
+          const SizedBox(height: 12),
+          _buildPerformanceCard(_stats!),
+        ],
         if (governorates.isNotEmpty || workAreas.isNotEmpty) ...[
           const SizedBox(height: 12),
           _section(
