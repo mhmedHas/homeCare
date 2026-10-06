@@ -94,9 +94,11 @@ class _RequestDetailsNurseScreenState extends State<RequestDetailsNurseScreen> {
       final requestRef = db.collection('careRequests').doc(request.id);
       final offerRef = db.collection('careOffers').doc('${request.id}_$uid');
       final userRef = db.collection('users').doc(uid);
+      final profileRef = db.collection('nurseProfiles').doc(uid);
 
       await db.runTransaction((tx) async {
         final userSnap = await tx.get(userRef);
+        final profileSnap = await tx.get(profileRef);
         final requestSnap = await tx.get(requestRef);
         final existingOffer = await tx.get(offerRef);
 
