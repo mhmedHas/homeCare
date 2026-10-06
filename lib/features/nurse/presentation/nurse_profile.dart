@@ -63,25 +63,27 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         return;
       }
 
+      // Load only the data needed to render the nurse's own profile.
+      // nurseDocuments and booking-based stats are protected/private reads;
+      // a permission error in either must not blank the whole profile.
       final results = await Future.wait([
         UserService().getUser(firebaseUser.uid),
         FirebaseFirestore.instance
             .collection('nurseProfiles')
             .doc(firebaseUser.uid)
             .get(),
-        FirebaseFirestore.instance
-            .collection('nurseDocuments')
-            .doc(firebaseUser.uid)
-            .get(),
-        NurseProfileStatsService().getStats(firebaseUser.uid),
       ]);
 
       final appUser = results[0] as AppUser?;
       final doc = results[1] as DocumentSnapshot<Map<String, dynamic>>;
       final profileData = doc.data();
-      final verificationDoc =
-          results[2] as DocumentSnapshot<Map<String, dynamic>>;
-      final stats = results[3] as NurseProfileStats;
+
+      NurseProfileStats? stats;
+      try {
+        stats = await NurseProfileStatsService().getStats(firebaseUser.uid);
+      } catch (e) {
+        debugPrint('nurse_profile: failed to load private stats: $e');
+      }
 
       String? photoUrl;
       final profilePhoto = profileData?['photoUrl'];
@@ -100,9 +102,9 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         _nurseProfile = profileData;
         _photoUrl = photoUrl;
         _stats = stats;
-        _isVerifiedByShifa =
-            verificationDoc.data()?['verificationStatus']?.toString() ==
-                'approved';
+        _isVerifiedByShifa = appUser?.isVerified == true ||
+            profileData?['isVerified'] == true ||
+            profileData?['verificationStatus']?.toString() == 'approved';
         _isLoading = false;
       });
     } catch (e) {
