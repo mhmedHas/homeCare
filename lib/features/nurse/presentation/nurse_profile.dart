@@ -102,9 +102,8 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
         _nurseProfile = profileData;
         _photoUrl = photoUrl;
         _stats = stats;
-        _isVerifiedByShifa = appUser?.isVerified == true ||
-            profileData?['isVerified'] == true ||
-            profileData?['verificationStatus']?.toString() == 'approved';
+        // users.isVerified is the single source of truth for verification.
+        _isVerifiedByShifa = appUser?.isVerified == true;
         _isLoading = false;
       });
     } catch (e) {
