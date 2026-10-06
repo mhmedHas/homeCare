@@ -38,17 +38,32 @@ class _VerificationStatusScreenState extends State<VerificationStatusScreen> {
         return;
       }
 
-      final doc = await FirebaseFirestore.instance
-          .collection('nurseDocuments')
+      // users.isVerified is the single source of truth for the
+      // actual verified/unverified state shown by the app.
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
           .doc(user.uid)
           .get();
 
-      if (doc.exists) {
-        final data = doc.data()!;
+      if (userDoc.data()?['isVerified'] == true) {
         setState(() {
-          _status = data['verificationStatus'] ?? 'not_submitted';
-          _rejectionReason = data['rejectionReason'];
+          _status = 'approved';
+          _rejectionReason = null;
         });
+      } else {
+        // Keep document workflow details only for the non-verified state.
+        final doc = await FirebaseFirestore.instance
+            .collection('nurseDocuments')
+            .doc(user.uid)
+            .get();
+
+        if (doc.exists) {
+          final data = doc.data()!;
+          setState(() {
+            _status = data['verificationStatus'] ?? 'not_submitted';
+            _rejectionReason = data['rejectionReason'];
+          });
+        }
       }
     } catch (e) {
       setState(() {
