@@ -48,24 +48,9 @@ class _RequestDetailsNurseScreenState extends State<RequestDetailsNurseScreen> {
             .get();
         _alreadyApplied = offer.docs.isNotEmpty;
 
-        // Verification may be stored in different nurse records for
-        // accounts created by older or newer verification flows.
-        final verificationSnap =
-            await db.collection('nurseDocuments').doc(uid).get();
+        // The account verification source of truth is users.isVerified.
         final userSnap = await db.collection('users').doc(uid).get();
-        final profileSnap =
-            await db.collection('nurseProfiles').doc(uid).get();
-
-        final documentsApproved =
-            verificationSnap.data()?['verificationStatus']?.toString() ==
-                'approved';
-        final userVerified = userSnap.data()?['isVerified'] == true;
-        final profileData = profileSnap.data() ?? <String, dynamic>{};
-        final profileVerified =
-            profileData['isVerified'] == true ||
-                profileData['verificationStatus']?.toString() == 'approved';
-
-        _isVerified = documentsApproved || userVerified || profileVerified;
+        _isVerified = userSnap.data()?['isVerified'] == true;
       }
 
       if (mounted) {
@@ -108,27 +93,15 @@ class _RequestDetailsNurseScreenState extends State<RequestDetailsNurseScreen> {
       final db = FirebaseFirestore.instance;
       final requestRef = db.collection('careRequests').doc(request.id);
       final offerRef = db.collection('careOffers').doc('${request.id}_$uid');
-      final verificationRef = db.collection('nurseDocuments').doc(uid);
       final userRef = db.collection('users').doc(uid);
-      final profileRef = db.collection('nurseProfiles').doc(uid);
 
       await db.runTransaction((tx) async {
-        final verificationSnap = await tx.get(verificationRef);
         final userSnap = await tx.get(userRef);
-        final profileSnap = await tx.get(profileRef);
         final requestSnap = await tx.get(requestRef);
         final existingOffer = await tx.get(offerRef);
 
-        final verificationStatus =
-            verificationSnap.data()?['verificationStatus']?.toString();
-        final documentsApproved = verificationStatus == 'approved';
-        final userVerified = userSnap.data()?['isVerified'] == true;
-        final profileData = profileSnap.data() ?? <String, dynamic>{};
-        final profileVerified =
-            profileData['isVerified'] == true ||
-                profileData['verificationStatus']?.toString() == 'approved';
-
-        if (!documentsApproved && !userVerified && !profileVerified) {
+        // users.isVerified is the single source of truth for verification.
+        if (userSnap.data()?['isVerified'] != true) {
           throw Exception('not_verified');
         }
         if (!requestSnap.exists || requestSnap.data()?['status'] != 'open')
