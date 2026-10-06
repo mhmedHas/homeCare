@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -59,7 +60,14 @@ class SupabaseStorageService {
               upsert: false,
               cacheControl: '3600',
             ),
+          ).timeout(
+            const Duration(seconds: 45),
+            onTimeout: () => throw TimeoutException(
+              'Supabase Storage upload timed out after 45 seconds',
+            ),
           );
+
+      debugPrint('[$logPrefix] upload success: $path');
     } on StorageException catch (e, stackTrace) {
       final message = e.message.toLowerCase();
       final alreadyExists =
@@ -83,7 +91,24 @@ class SupabaseStorageService {
               contentType: contentType,
               cacheControl: '3600',
             ),
+          ).timeout(
+            const Duration(seconds: 45),
+            onTimeout: () => throw TimeoutException(
+              'Supabase Storage update timed out after 45 seconds',
+            ),
           );
+      debugPrint('[$logPrefix] update success: $path');
+    } on TimeoutException catch (e, stackTrace) {
+      debugPrint('[$logPrefix] TIMEOUT');
+      debugPrint('[$logPrefix] message=$e');
+      debugPrintStack(stackTrace: stackTrace);
+      rethrow;
+    } catch (e, stackTrace) {
+      debugPrint('[$logPrefix] UNEXPECTED ERROR');
+      debugPrint('[$logPrefix] errorType=${e.runtimeType}');
+      debugPrint('[$logPrefix] error=$e');
+      debugPrintStack(stackTrace: stackTrace);
+      rethrow;
     }
 
     final publicUrl = _client.storage.from(bucket).getPublicUrl(path);
