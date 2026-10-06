@@ -91,7 +91,7 @@ class _NurseProfileScreenState extends State<NurseProfileScreen> {
       setState(() {
         _nurse = nurse;
         _profile = profileDoc.data() ?? {};
-        _verification = verificationDoc.data() ?? {};
+        _verification = {};
         _stats = stats;
         _trustScore = trustScore;
         _reviews = reviews;
