@@ -68,7 +68,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (role == 'client') {
         if (mounted) context.go('/client/home');
       } else {
-        if (mounted) context.go('/nurse/home');
+        if (mounted) context.go('/nurse/registration');
       }
     } on FirebaseAuthException catch (e) {
       String msg = 'حدث خطأ. حاول مرة أخرى.';
