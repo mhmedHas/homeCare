@@ -21,12 +21,27 @@ class AppInformationScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+        centerTitle: true,
+        backgroundColor: AppColors.background,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        child: type == InformationPageType.contact
-            ? _ContactContent()
-            : _PolicyContent(type: type),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 30),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _InformationHero(type: type, title: title),
+            const SizedBox(height: 18),
+            if (type == InformationPageType.contact)
+              const _ContactContent()
+            else
+              _PolicyContent(type: type),
+          ],
+        ),
       ),
     );
   }
@@ -86,22 +101,129 @@ class _PolicyContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('شفاء', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: AppColors.primary)),
-        const SizedBox(height: 16),
-        ...sections.map((section) => Padding(
-          padding: const EdgeInsets.only(bottom: 20),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: sections.asMap().entries.map((entry) {
+        final section = entry.value;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(17),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(19),
+            border: Border.all(color: const Color(0xFFE5ECF1)),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(section['title']!, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 7),
-              Text(section['body']!, style: const TextStyle(fontSize: 15, height: 1.65)),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.09),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Text(
+                      (entry.key + 1).toString(),
+                      style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 5),
+                      child: Text(
+                        section['title']!,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          height: 1.4,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                section['body']!,
+                style: const TextStyle(fontSize: 14, height: 1.75, color: AppColors.textSecondary),
+              ),
             ],
           ),
-        )),
-      ],
+        );
+      }).toList(),
+    );
+  }
+}
+
+
+class _InformationHero extends StatelessWidget {
+  final InformationPageType type;
+  final String title;
+  const _InformationHero({required this.type, required this.title});
+
+  IconData get _icon {
+    switch (type) {
+      case InformationPageType.about: return Icons.volunteer_activism_outlined;
+      case InformationPageType.terms: return Icons.description_outlined;
+      case InformationPageType.privacy: return Icons.shield_outlined;
+      case InformationPageType.refund: return Icons.receipt_long_outlined;
+      case InformationPageType.contact: return Icons.support_agent_rounded;
+    }
+  }
+
+  String get _subtitle {
+    switch (type) {
+      case InformationPageType.about: return 'رعاية منزلية أقرب ليك وراحة بال لأسرتك.';
+      case InformationPageType.terms: return 'اقرأ القواعد المنظمة لاستخدام خدمات شفاء.';
+      case InformationPageType.privacy: return 'معلوماتك وخصوصيتك جزء مهم من تجربتك معانا.';
+      case InformationPageType.refund: return 'كل التفاصيل المتعلقة بالإلغاء واسترداد المدفوعات.';
+      case InformationPageType.contact: return 'محتاج مساعدة؟ فريق شفاء يسعده التواصل معاك.';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.primary, Color(0xFF155E75)],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(17),
+              border: Border.all(color: Colors.white24),
+            ),
+            child: Icon(_icon, color: Colors.white, size: 28),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 7),
+                Text(_subtitle, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.55)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -109,41 +231,81 @@ class _PolicyContent extends StatelessWidget {
 class _ContactContent extends StatelessWidget {
   const _ContactContent();
 
-  Future<void> _call() async {
-    await launchUrl(Uri.parse('tel:01119684470'));
-  }
-
-  Future<void> _email() async {
-    await launchUrl(Uri.parse('mailto:mhmed.hassan.antaka@gmail.com'));
+  Future<void> _openLink(BuildContext context, Uri uri) async {
+    try {
+      final opened = await launchUrl(uri);
+      if (!opened && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر فتح تطبيق التواصل. حاول مرة أخرى.')),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر فتح تطبيق التواصل. حاول مرة أخرى.')),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Icon(Icons.support_agent, size: 72, color: AppColors.primary),
-        const SizedBox(height: 12),
-        Text('يسعدنا تواصلك معنا', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        const Text('للاستفسارات أو الشكاوى أو المساعدة المتعلقة بالحجز والدفع، يمكنك التواصل مع فريق شفاء.', textAlign: TextAlign.center, style: TextStyle(fontSize: 15, height: 1.6)),
-        const SizedBox(height: 24),
-        Card(
-          child: Column(
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE5ECF1)),
+          ),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ListTile(
-                leading: const Icon(Icons.phone_outlined, color: AppColors.primary),
-                title: const Text('الهاتف'),
-                subtitle: const Text('01119684470'),
-                trailing: const Icon(Icons.call_outlined),
-                onTap: _call,
+              Text('إحنا موجودين علشان نساعدك',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+              SizedBox(height: 8),
+              Text(
+                'لو عندك استفسار عن الحجز أو الدفع أو واجهتك مشكلة في استخدام التطبيق، تواصل معانا من خلال الوسيلة المناسبة ليك.',
+                style: TextStyle(fontSize: 14, height: 1.7, color: AppColors.textSecondary),
               ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.email_outlined, color: AppColors.primary),
-                title: const Text('البريد الإلكتروني'),
-                subtitle: const Text('mhmed.hassan.antaka@gmail.com'),
-                trailing: const Icon(Icons.mail_outline),
-                onTap: _email,
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _ContactMethodCard(
+          icon: Icons.phone_in_talk_outlined,
+          title: 'اتصل بينا',
+          detail: '01119684470',
+          actionLabel: 'إجراء مكالمة',
+          onTap: () => _openLink(context, Uri.parse('tel:01119684470')),
+        ),
+        const SizedBox(height: 10),
+        _ContactMethodCard(
+          icon: Icons.email_outlined,
+          title: 'البريد الإلكتروني',
+          detail: 'mhmed.hassan.antaka@gmail.com',
+          actionLabel: 'إرسال رسالة',
+          onTap: () => _openLink(context, Uri.parse('mailto:mhmed.hassan.antaka@gmail.com')),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 20),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'لو بتتواصل بخصوص حجز، جهّز رقم الحجز ووصف مختصر للمشكلة علشان نقدر نساعدك بشكل أسرع.',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.6),
+                ),
               ),
             ],
           ),
@@ -152,3 +314,67 @@ class _ContactContent extends StatelessWidget {
     );
   }
 }
+
+class _ContactMethodCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String detail;
+  final String actionLabel;
+  final VoidCallback onTap;
+
+  const _ContactMethodCard({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    required this.actionLabel,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFE5ECF1)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: AppColors.primary, size: 23),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 5),
+                    Text(detail, textDirection: TextDirection.ltr, textAlign: TextAlign.right,
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    const SizedBox(height: 8),
+                    Text(actionLabel, style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_back_ios_new_rounded, size: 15, color: AppColors.textSecondary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
