@@ -73,6 +73,7 @@ class AppUser {
   AppUser copyWith({
     String? name,
     String? phone,
+    String? email,
     String? photoUrl,
     bool? profileCompleted,
   }) {
@@ -81,7 +82,7 @@ class AppUser {
       role: role,
       name: name ?? this.name,
       phone: phone ?? this.phone,
-      email: email,
+      email: email ?? this.email,
       photoUrl: photoUrl ?? this.photoUrl,
       isActive: isActive,
       isVerified: isVerified,
