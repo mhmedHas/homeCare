@@ -72,6 +72,12 @@ class _NurseBookingsScreenState extends State<NurseBookingsScreen>
         actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))],
         bottom: TabBar(
           controller: _tabs,
+          // ألوان صريحة حتى لا يختفي نص التبويب المختار أو غير المختار.
+          labelColor: AppColors.primary,
+          unselectedLabelColor: Colors.grey.shade700,
+          indicatorColor: AppColors.primary,
+          labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
           isScrollable: true,
           tabs: const [Tab(text: 'الكل'), Tab(text: 'القادمة'), Tab(text: 'السابقة'), Tab(text: 'الملغاة')],
         ),
