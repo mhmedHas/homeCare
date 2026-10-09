@@ -101,7 +101,7 @@ class _RatingScreenState extends State<RatingScreen> {
         comment: _commentController.text,
       );
 
-      if (mounted) context.go('/client/my-bookings');
+      if (mounted) context.go('/client/payment/${booking.id}');
     } catch (e) {
       if (mounted) {
         setState(() {
