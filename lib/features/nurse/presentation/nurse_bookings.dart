@@ -70,16 +70,40 @@ class _NurseBookingsScreenState extends State<NurseBookingsScreen>
         title: const Text('حجوزاتي'),
         automaticallyImplyLeading: false,
         actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))],
-        bottom: TabBar(
-          controller: _tabs,
-          // ألوان صريحة حتى لا يختفي نص التبويب المختار أو غير المختار.
-          labelColor: AppColors.primary,
-          unselectedLabelColor: Colors.grey.shade700,
-          indicatorColor: AppColors.primary,
-          labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-          isScrollable: true,
-          tabs: const [Tab(text: 'الكل'), Tab(text: 'القادمة'), Tab(text: 'السابقة'), Tab(text: 'الملغاة')],
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF172033),
+        surfaceTintColor: Colors.transparent,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(68),
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F3F8),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: TabBar(
+              controller: _tabs,
+              dividerColor: Colors.transparent,
+              indicatorSize: TabBarIndicatorSize.tab,
+              indicatorPadding: const EdgeInsets.all(2),
+              indicator: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              labelColor: Colors.white,
+              unselectedLabelColor: const Color(0xFF586174),
+              labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              isScrollable: false,
+              tabs: const [
+                Tab(text: 'الكل'),
+                Tab(text: 'القادمة'),
+                Tab(text: 'السابقة'),
+                Tab(text: 'الملغاة'),
+              ],
+            ),
+          ),
         ),
       ),
       body: _loading
@@ -125,6 +149,13 @@ class _BookingList extends StatelessWidget {
         final client = clients[b.clientId];
         final clientName = client?.name.trim().isNotEmpty == true ? client!.name.trim() : 'عميل';
         return Card(
+          elevation: 0,
+          color: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: Color(0xFFE7EBF2)),
+          ),
           margin: EdgeInsets.zero,
           child: ListTile(
             contentPadding: const EdgeInsets.all(14),
@@ -168,8 +199,16 @@ class _Status extends StatelessWidget {
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(color: color.withValues(alpha: .12), borderRadius: BorderRadius.circular(12)),
-      child: Text(text, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Text(
+        text,
+        maxLines: 1,
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w800),
+      ),
     );
   }
 }
