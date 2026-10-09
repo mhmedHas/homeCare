@@ -31,7 +31,11 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
     try {
       final uid = AuthService().currentUser?.uid;
       if (uid == null) throw Exception('auth');
-      final requests = await CareRequestService().getClientRequests(uid);
+      var requests = await CareRequestService().getClientRequests(uid);
+      final repairedCompletedStatuses = await _syncCompletedRequests(requests);
+      if (repairedCompletedStatuses) {
+        requests = await CareRequestService().getClientRequests(uid);
+      }
       final offerCounts = await _loadOfferCounts(requests);
       if (mounted) {
         setState(() {
@@ -42,6 +46,46 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
       }
     } catch (_) {
       if (mounted) setState(() { _error = 'تعذر تحميل طلبات الرعاية'; _loading = false; });
+    }
+  }
+
+  Future<bool> _syncCompletedRequests(List<CareRequest> requests) async {
+    final candidates = requests
+        .where((request) => request.status != 'completed' && request.status != 'cancelled')
+        .map((request) => request.id)
+        .toList();
+    if (candidates.isEmpty) return false;
+
+    try {
+      final db = FirebaseFirestore.instance;
+      final completedRequestIds = <String>{};
+      for (var i = 0; i < candidates.length; i += 30) {
+        final batchIds = candidates.skip(i).take(30).toList();
+        final bookings = await db
+            .collection('bookings')
+            .where('careRequestId', whereIn: batchIds)
+            .get();
+        for (final booking in bookings.docs) {
+          if (booking.data()['status']?.toString() == 'completed') {
+            final requestId = booking.data()['careRequestId']?.toString() ?? '';
+            if (requestId.isNotEmpty) completedRequestIds.add(requestId);
+          }
+        }
+      }
+
+      if (completedRequestIds.isEmpty) return false;
+      final batch = db.batch();
+      for (final requestId in completedRequestIds) {
+        batch.update(db.collection('careRequests').doc(requestId), {
+          'status': 'completed',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      return true;
+    } catch (_) {
+      // A reconciliation failure must not prevent the client from seeing requests.
+      return false;
     }
   }
 
