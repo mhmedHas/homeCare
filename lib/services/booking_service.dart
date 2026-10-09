@@ -330,15 +330,28 @@ class BookingService {
 
       final data = bookingSnap.data()!;
       final nurseId = data['nurseId']?.toString() ?? '';
+      final requestId = data['careRequestId']?.toString() ?? '';
       if (nurseId.isEmpty) throw StateError('بيانات الممرض غير مكتملة.');
       if (!['confirmed', 'in_progress'].contains(data['status']?.toString())) {
         throw StateError('الحجز ليس نشطًا.');
       }
 
+      // Read the linked request before writes, then keep its status in sync.
+      final requestRef = requestId.isNotEmpty
+          ? db.collection('careRequests').doc(requestId)
+          : null;
+      final requestSnap = requestRef == null ? null : await tx.get(requestRef);
+
       tx.update(bookingRef, {
         'status': 'completed',
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      if (requestRef != null && requestSnap?.exists == true) {
+        tx.update(requestRef, {
+          'status': 'completed',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
       tx.delete(db.collection('nurseBookingLocks').doc(nurseId));
     });
   }
