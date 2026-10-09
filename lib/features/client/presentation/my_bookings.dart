@@ -159,6 +159,10 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
         ),
         bottom: TabBar(
           controller: _tabController,
+          // ألوان صريحة حتى يظل النص واضحًا مع أي ثيم أو لون للخلفية.
+          labelColor: AppColors.primary,
+          unselectedLabelColor: Colors.grey.shade700,
+          indicatorColor: AppColors.primary,
           indicatorWeight: 3,
           indicatorSize: TabBarIndicatorSize.tab,
           labelStyle: const TextStyle(
