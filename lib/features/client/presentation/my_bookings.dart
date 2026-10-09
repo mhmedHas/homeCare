@@ -157,36 +157,51 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
             fontWeight: FontWeight.w800,
           ),
         ),
-        bottom: TabBar(
-          controller: _tabController,
-          // ألوان صريحة حتى يظل النص واضحًا مع أي ثيم أو لون للخلفية.
-          labelColor: AppColors.primary,
-          unselectedLabelColor: Colors.grey.shade700,
-          indicatorColor: AppColors.primary,
-          indicatorWeight: 3,
-          indicatorSize: TabBarIndicatorSize.tab,
-          labelStyle: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF172033),
+        surfaceTintColor: Colors.transparent,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(76),
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F3F8),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              dividerColor: Colors.transparent,
+              indicatorSize: TabBarIndicatorSize.tab,
+              indicatorPadding: const EdgeInsets.all(2),
+              indicator: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.18),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              labelColor: Colors.white,
+              unselectedLabelColor: const Color(0xFF586174),
+              labelStyle: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+              unselectedLabelStyle: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+              tabs: const [
+                Tab(icon: Icon(Icons.event_available_outlined, size: 19), text: 'قادمة'),
+                Tab(icon: Icon(Icons.play_circle_outline, size: 19), text: 'جارية'),
+                Tab(icon: Icon(Icons.check_circle_outline, size: 19), text: 'منتهية'),
+              ],
+            ),
           ),
-          unselectedLabelStyle: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-          tabs: const [
-            Tab(
-              icon: Icon(Icons.event_available_outlined),
-              text: 'قادمة',
-            ),
-            Tab(
-              icon: Icon(Icons.play_circle_outline),
-              text: 'جارية',
-            ),
-            Tab(
-              icon: Icon(Icons.check_circle_outline),
-              text: 'منتهية',
-            ),
-          ],
         ),
       ),
       body: _buildBody(),
