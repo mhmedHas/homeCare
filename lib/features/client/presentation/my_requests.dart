@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
@@ -17,6 +18,7 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
   bool _loading = true;
   String? _error;
   List<CareRequest> _requests = [];
+  Map<String, int> _offerCounts = {};
 
   @override
   void initState() {
@@ -30,10 +32,44 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
       final uid = AuthService().currentUser?.uid;
       if (uid == null) throw Exception('auth');
       final requests = await CareRequestService().getClientRequests(uid);
-      if (mounted) setState(() { _requests = requests; _loading = false; });
+      final offerCounts = await _loadOfferCounts(requests);
+      if (mounted) {
+        setState(() {
+          _requests = requests;
+          _offerCounts = offerCounts;
+          _loading = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() { _error = 'تعذر تحميل طلبات الرعاية'; _loading = false; });
     }
+  }
+
+  Future<Map<String, int>> _loadOfferCounts(List<CareRequest> requests) async {
+    final counts = <String, int>{for (final request in requests) request.id: 0};
+    try {
+      final db = FirebaseFirestore.instance;
+      for (var i = 0; i < requests.length; i += 30) {
+        final batch = requests.skip(i).take(30).map((request) => request.id).toList();
+        if (batch.isEmpty) continue;
+        final snapshot = await db
+            .collection('careOffers')
+            .where('requestId', whereIn: batch)
+            .get();
+        for (final offer in snapshot.docs) {
+          final data = offer.data();
+          final requestId = data['requestId']?.toString() ?? '';
+          final status = data['status']?.toString() ?? 'pending';
+          if (counts.containsKey(requestId) && status != 'cancelled' && status != 'withdrawn') {
+            counts[requestId] = (counts[requestId] ?? 0) + 1;
+          }
+        }
+      }
+    } catch (_) {
+      // Keep the request list usable if applicant counts cannot be loaded.
+      return {};
+    }
+    return counts;
   }
 
   @override
@@ -114,6 +150,23 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
                 _InfoChip(icon: Icons.location_on_outlined, text: request.governorate),
                 _InfoChip(icon: Icons.schedule_outlined, text: '${request.shiftHours} ساعة'),
                 _InfoChip(icon: Icons.calendar_today_outlined, text: '${request.daysCount} أيام'),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _InfoChip(
+                  icon: Icons.people_alt_outlined,
+                  text: _offerCounts.containsKey(request.id)
+                      ? '${_offerCounts[request.id]} ممرض مقدم'
+                      : 'عدد المتقدمين غير متاح',
+                ),
+                _InfoChip(
+                  icon: Icons.access_time,
+                  text: 'أُضيف ${DateFormat('d/M/yyyy', 'ar').format(request.createdAt)}',
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -227,7 +280,7 @@ class _ProgressTimeline extends StatelessWidget {
       case 'open': return 1;
       case 'booked': return 2;
       case 'in_progress': return 3;
-      case 'completed': return 4;
+      case 'completed': return 5;
       case 'cancelled': return -1;
       default: return 1;
     }
